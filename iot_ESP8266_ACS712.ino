@@ -1,6 +1,6 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
-// ***** Heater management and consumption logging via MQTT interface to DomoticZ. Corresponding Hardware is ACS712 and ElectroDragon IoT Wifi Relay board *****
-// V0.8 - May 2018
+// ***** Heater management and power usage logging via MQTT to DomoticZ. Corresponding Hardware is ACS712 and ElectroDragon IoT Wifi Relay board *****
+// V0.851 - May 2018
 
 #include "WiFi_OTA_MQTT_SecretKeys.h"
 #include <ESP8266WiFi.h>
@@ -52,19 +52,28 @@ byte _LOW                         = LOW;  // Reverse high/low if heater is conne
 byte _HIGH                        = HIGH; // Reverse high/low if heater is connected to an NC relay (SPDT case)
 
 // ACS712 parameters
-#define NUM_READINGS_TOCALIBRATE     5000                    // Number of readings at calibration concerning Relative digital zero 
-const unsigned long sampleTime     = 100000UL;               // Sample over 100ms, it is an exact number of cycles for both 50Hz and 60Hz mains
-const unsigned long numSamples     = 250UL;                  // Choose the number of samples to divide sampleTime exactly, but low enough for the ADC to keep up
-const unsigned long sampleInterval = sampleTime/numSamples;  // The sampling interval, must be longer than then ADC conversion time
-long  Vadc_Zero                    = ( 1023 * 2.5 ) / ACS712_Voltage_Divider; // Relative digital zero of the ESP8266 input from ACS712  (i.e 0 Amp crossing the ACS712)
-#define ARMS_NO_LOAD                 0.3                     // To correct ACS712 unaccuracy readings at NO load situation (readings between 0.15 and 0.20 A). Readings below ARMS_NO_LOAD will be assumed to be zero
+#define NUM_READINGS_TOCALIBRATE       5000                    // Number of readings at calibration concerning Relative digital zero 
+const unsigned long sampleTime       = 100000UL;               // Sample over 100ms, it is an exact number of cycles for both 50Hz and 60Hz mains
+const unsigned long numSamples       = 250UL;                  // Choose the number of samples to divide sampleTime exactly, but low enough for the ADC to keep up
+const unsigned long sampleInterval   = sampleTime/numSamples;  // The sampling interval, must be longer than then ADC conversion time
+float Vadc_Zero                      = ( 1024 * 2.5 ) / ACS712_Voltage_Divider; // Relative digital zero of the ESP8266 input from ACS712  (i.e 0 Amp crossing the ACS712)
+int   Vadc_Zero_Min                  = 1023;
+int   Vadc_Zero_Max                  = 0; 
+float Arms_No_Load;                                          // To correct ACS712 unaccuracy readings at NO load situation (readings between 0.15 and 0.20 A). Readings below 1.2 * ARMS_NO_LOAD will be assumed to be zero
+float NominalPowerSelfLearning;                              // Keep the Sum of all heater power readings (when heating) to get the average  
+unsigned long SelfLearningNumSamples = 1;                    // 0 = NO Self Learning i.e. use Power found in DomoticZ device name
+#define STOP_SELF_LEARNING             1000000               // Around 120 days (based on heater heating 12 hours per day)
+int     NominalPowerOutOfRange       = 0;                    // Number of times power usage found  between 0 and 0.8 * Heater Nominal Power with SelfLearningNumSamples=1; i.e. bad heater nominal power declared here
+#define FALSE_HEATER_NOMINAL_POWER     5                     // if NominalPowerOutOfRange reaches this limit, change the heater nominal power declared here
 
 // Sensor readings management
 enum          { ACS712, HLW8012, THERMOSTAT, ACS712RMS }; // Various sensors/algorithms type used -- ACS712 = ACS712 w/ Min/Max algorithm, THERMOSTAT, ACS712RMS = ACS712 w/ RootMeanSquare algorithm
-#define       READINGS_PER_MINUTE  12                     // Number of power consumption readings per minute
+#define       READINGS_PER_MINUTE  12                     // Number of power usage readings per minute
 float         HEATER_CONSUMPTION_LAST_MINUTE[READINGS_PER_MINUTE];
 byte          LastReadingPointer = 0;
 unsigned long timer              = 0;
+float         LastHeaterPower    = 0;
+float         HeaterPower        = 0;
 
 // Heaters parameters
 #define DUMMY_IDX           "0"
@@ -78,8 +87,8 @@ String  HEATER_METER_IDX[NBR_HEATERS+1]    = { "27", "28", "29", "30", "31",    
                                                "34", "35", "36", "37", "38", DUMMY_IDX,            // 34 = ECS, 35 = CH4, 36 = CH3, 37 = CH2, 38 = Parental, 53 = SDB (not installed)
                                                DUMMY_IDX };                                             // ** UNDECLARED/MAC_UNKNOWN ONE. Set to DUMMY_IDX = "0" -- 0 IS SUPPOSED TO BE AN NON EXISTING DOMOTICZ DEVICE 
 
-float   HEATER_POWER[NBR_HEATERS+1]        = { 1426, 1426, 1384, 1261, 1261,                          // === Heaters POWER
-                                               1603, 1239, 909, 1422, 1442, 500,
+float   HEATER_POWER[NBR_HEATERS+1]        = { 1426, 1426, 1384, 1261, 1261,                          // === Heaters NOMINAL POWER. Can be set to ONE (Watt) or the heater MANUFACTURER VALUE. if ONE, Self Learning will take more time to find out the right value
+                                               1603, 1239, 909, 1422, 1442, 500,                   // Can also be set to ZERO, in this case we use raw value read from the power usage sensor (i.e. power usage not rounded to zero or nominal power)
                                                0 };                                                     // ** UNDECLARED/MAC_UNKNOWN. Nominal Power set to zero
 
 String  HEATER_TYPE[NBR_HEATERS+1]         = { "Heater", "Heater", "Heater", "Heater", "Heater",      // === Heater type
@@ -103,14 +112,15 @@ String  HEATER_RELAY[NBR_HEATERS+1]        = { "NO", "NO", "NO", "NO", "NO",    
                                                "NO" };                                                  // ** UNDECLARED/MAC_UNKNOWN ONE.   
                                                
 byte    HEATER_WIFI_AP[NBR_HEATERS+1]      = { 0, 0, 0, 0, 0,                                         // === Heaters Preferred Wifi Access Point  0=first one in *ssid[NUMBER_OF_AP], 1 =second one, ...
-                                               2, 0, 0, 1, 1, 1,
+                                               2, 0, 1, 1, 1, 1,
                                                2 };                                                                                         
-String  HEATER_MAC = "";
-int     HouseHeatingMode;  // 0=Off/10=HorsGel/20=Eco/30=Confort
-String  Tariff;            // Current tariff to use, ie Heures Pleines or Heures Creuses
-long    HPWh       = -1;   // HP and HC DomoticZ smartmeter P1 device index meter 
-long    HCWh       = -1;   // Initialized both to -1 to be sure we got at boot the stored latest values from DomoticZ before starting updating DomoticZ 
-float   Decimal_Wh = 0;    // Wh Decimal Part we can't store in P1 index meter. Kept for the next meter updates (every minute)
+String  HEATER_MAC                = "";
+float   HEATER_POWER_BOOT;               // Saved value of Heater Nominal Power declared here
+int     HouseHeatingMode;                // 0=Off/10=HorsGel/20=Eco/30=Confort
+String  Tariff;                          // Current tariff to use, ie Heures Pleines or Heures Creuses
+long    HPWh                      = -1;  // HP and HC DomoticZ smartmeter P1 device index meter 
+long    HCWh                      = -1;  // Initialized both to -1 to be sure we got at boot the stored latest values from DomoticZ before starting updating DomoticZ 
+float   Decimal_Wh                = 0;   // Wh Decimal Part we can't store in P1 index meter. Kept for the next meter updates (every minute)
 
 /* CODE */
 
@@ -189,7 +199,7 @@ void setup() {
    pinMode(Thermostat_Switch,INPUT); 
 
    Serial.begin(115200);
-   Serial.println("iot_EDRAGON_ACS712_Heating Booting - Firmware Version : 0.80");
+   Serial.println("iot_EDRAGON_ACS712_Heating Booting - Firmware Version : 0.851");
    
    // Find configuration main index 
    WiFi.macAddress(mac);
@@ -203,6 +213,8 @@ void setup() {
       else thisHEATER++;  
    }
    if( HEATER_RELAY[thisHEATER] == "NC") { _LOW = HIGH; _HIGH = LOW; }
+   NominalPowerSelfLearning = HEATER_POWER[thisHEATER];
+   HEATER_POWER_BOOT        = HEATER_POWER[thisHEATER];
    
    // connect to WiFi Access Point
    WiFi_AP = HEATER_WIFI_AP[thisHEATER];
@@ -255,17 +267,28 @@ void setup() {
    
    // ACS712 calibration
    if( HEATER_SENSOR[thisHEATER] == ACS712RMS) { 
-       Serial.println("Estimating average ACS712 output voltage for non loading condition - Vadc_Zero(Digital/mV)");
+       int Vadc; 
+       Serial.println("Calibrating ACS712/ADC at non loading condition");
        Vadc_Zero = 0;
        digitalWrite(Relay1,_LOW); delay(2000); digitalWrite(Relay2,_LOW); delay(2000);
        //read n samples to stabilise value
        for (int i=0; i < NUM_READINGS_TOCALIBRATE; i++) {
-          Vadc_Zero += analogRead(A0);
+          Vadc = analogRead(A0);
+          if ( Vadc <= Vadc_Zero_Min ) Vadc_Zero_Min = Vadc;
+          if  (Vadc >= Vadc_Zero_Max ) Vadc_Zero_Max = Vadc;
+          Vadc_Zero += Vadc;
           delay(1);//depends on sampling (on filter capacitor), can be 1/80000 (80kHz) max.
        }  // for (int i=0; i < NUM_READINGS_TOCALIBRATE; i++) {
        Vadc_Zero /= NUM_READINGS_TOCALIBRATE;
+       Arms_No_Load = ( ACS712_Voltage_Divider * 0.707 * ( (Vadc_Zero_Max - Vadc_Zero_Min) / 2 ) / 1024  ) / HEATER_ACS712_VperA[thisHEATER];
    }  // if( HEATER_SENSOR[thisHEATER] == ACS712RMS) { 
-
+   
+   if( HEATER_SENSOR[thisHEATER] == THERMOSTAT ) { 
+       Vadc_Zero_Min = Vadc_Zero;
+	     Vadc_Zero_Max = Vadc_Zero;
+	     Arms_No_Load = ( ACS712_Voltage_Divider * 0.707 * ( (Vadc_Zero_Max - Vadc_Zero_Min) / 2 ) / 1024  ) / HEATER_ACS712_VperA[thisHEATER];
+   }
+   
    // Apply local heating policy declared here
    if( HEATER_ACTIVE[thisHEATER] == "On" || HEATER_RELAY[thisHEATER] == "NC" ) { digitalWrite(Relay1,_HIGH); delay(2000); digitalWrite(Relay2,_HIGH); delay(2000); }
       
@@ -293,6 +316,12 @@ void setup() {
    Serial.println( Vadc_Zero );   
    Serial.print  ( "HEATER_ACS712_Vadc_Zero_mV: " );   
    Serial.println( map(Vadc_Zero, 0, 1023, 0, 1000) );
+   Serial.print  ( "HEATER_ACS712_Relative_Digital_Vadc_Min/Max: " );
+   Serial.print  ( Vadc_Zero_Min ); Serial.print("/"); Serial.println( Vadc_Zero_Max );   
+   Serial.print  ( "HEATER_ACS712_Vadc_Zero_Min/Max_mV: " );   
+   Serial.print  ( map(Vadc_Zero_Min, 0, 1023, 0, 1000) );  Serial.print("/");  Serial.println( map(Vadc_Zero_Max, 0, 1023, 0, 1000) );
+   Serial.print  ( "HEATER_ACS712_Arms_At_No_Load_Condition using Peak Algorithm: " );   
+   Serial.println( Arms_No_Load );   
    Serial.print  ( "HEATER_RELAY: " );
    Serial.println( HEATER_RELAY[thisHEATER] );
 
@@ -320,7 +349,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
    if ( strcmp(topic, topic_Domoticz_OUT) == 0 ) {
         JsonObject& root = jsonBuffer.parseObject(messageReceived);
         if (!root.success()) {
-           Serial.println("parsing Domoticz/out JSON Received Message failed");
+           Serial.println("Parsing Domoticz/out JSON Received Message failed");
            return;
         }
 
@@ -377,13 +406,22 @@ void callback(char* topic, byte* payload, unsigned int length) {
              int posbeg = string.indexOf( "{" );
              int posend = string.indexOf( "}" );
              if( posbeg != -1 && posend != -1 && posend > posbeg+1 ) {
-                 int NominalPower = 100 * string.substring(posbeg+1, posend).toInt();  // If no valid conversion could be performed because the string doesn't start with a integer number, a zero is returned
+                 int NominalPower = string.substring(posbeg+1, posend).toInt();  // If no valid conversion could be performed because the string doesn't start with a integer number, a zero is returned
                  if( NominalPower >= 0 ) { 
                        HEATER_POWER[thisHEATER] = NominalPower;
-                       Serial.print("Nominal Power replaced by the value found for this heater in DomoticZ. New Nominal Power Value (Watts) is: ");
+                       NominalPowerSelfLearning = NominalPower;  // Reset Self Learning
+                       SelfLearningNumSamples = 0;  
+                       Serial.print("HEATER NOMINAL POWER CHANGED to the DomoticZ value. Nominal Power (Watts) is now: ");
                        Serial.println ( HEATER_POWER[thisHEATER] ); 
                  } // if( NominalPower != 0 ) {
-             }  // if( posbeg != -1 && posend != -1 && posend > posbeg+1 ) {    
+             }  // if( posbeg != -1 && posend != -1 && posend > posbeg+1 ) {
+             else if( SelfLearningNumSamples == 0 ) { // Domoticz User/Admin has just switched this Heater from Raw or Nominal Power Declared to Self Learning 
+                      HEATER_POWER[thisHEATER] = HEATER_POWER_BOOT; 
+                      Serial.print("HEATER NOMINAL POWER RESET to value declared locally. Nominal Power (Watts) is now: ");
+                      Serial.println ( HEATER_POWER[thisHEATER] ); 
+                      NominalPowerSelfLearning = HEATER_POWER_BOOT; 
+                      SelfLearningNumSamples = 1;  
+             } // else if( HEATER_POWER[thisHEATER]
         } // if ( strcmp(idx, HEATER_METER_IDX[thisHEATER]) == 0 ) { 
         
    } // if domoticz message
@@ -392,7 +430,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
    if ( strcmp(topic, topic_Heating_OUT) == 0 ) {
         JsonObject& root = jsonBuffer.parseObject(messageReceived);
         if (!root.success()) {
-           Serial.println("parsing heating/out JSON Received Message failed");
+           Serial.println("Parsing heating/out JSON Received Message failed");
            return;
         }
         const char* HeaterUpDownChar = root[ HEATER_METER_IDX[thisHEATER] ];
@@ -437,7 +475,8 @@ void reconnect() {
   
         // Say now "Me the heater, I'm here" and then get the context 
         if( ColdBoot )
-             string = "{\"command\" : \"addlogmessage\", \"message\" : \"New " + HEATER_TYPE[thisHEATER] + " Online - COLD BOOT Reason : " + ESP.getResetReason() + " - Firmware Version : 0.80 - SSID/IP/MAC : " + WiFi.SSID() + "/" + WiFi.localIP().toString() + "/" + WiFi.macAddress().c_str() + "\"}";
+             string = "{\"command\" : \"addlogmessage\", \"message\" : \"New " + HEATER_TYPE[thisHEATER] + " Online - COLD BOOT Reason : " + ESP.getResetReason() + " - Firmware Version : 0.851 - SSID/IP/MAC : " + WiFi.SSID() + "/" + WiFi.localIP().toString() + "/" + WiFi.macAddress().c_str() +
+                                                                                                           " - ACS712 Calibration Vadc_Zero/Vadc_Zero_Min/Vadc_Zero_Max/Arms_No_Load : " + Vadc_Zero + "/" + Vadc_Zero_Min + "/" + Vadc_Zero_Max + "/" + Arms_No_Load + "\"}";
         else if ( WiFiWasRenew )
                   string = "{\"command\" : \"addlogmessage\", \"message\" : \"New " + HEATER_TYPE[thisHEATER] + " Online - WIFI CONNECTION RENEWED - SSID/IP/MAC : " + WiFi.SSID() + "/" + WiFi.localIP().toString() + "/" + WiFi.macAddress().c_str() + "\"}";   
              else string = "{\"command\" : \"addlogmessage\", \"message\" : \"New " + HEATER_TYPE[thisHEATER] + " Online - MQTT CONNECTION RENEWED - SSID/IP/MAC : " + WiFi.SSID() + "/" + WiFi.localIP().toString() + "/" + WiFi.macAddress().c_str() + "\"}";   
@@ -459,7 +498,7 @@ void reconnect() {
         Serial.print("Published to domoticz/in. Status=");
         if ( client.publish(topic_Domoticz_IN, msgToPublish) ) Serial.println("OK"); else Serial.println("KO");    
       
-        // Ask DomoticZ to publish last consumption stored for this heater
+        // Ask DomoticZ to publish last power usage stored for this heater
         if( ColdBoot ) {
           if( HEATER_METER_IDX[thisHEATER] != DUMMY_IDX ) {
               string="{\"command\": \"getdeviceinfo\", \"idx\": " + HEATER_METER_IDX[thisHEATER] + "}";
@@ -499,8 +538,8 @@ void loop() {
   
   ArduinoOTA.handle();
     
-  // Read consumption sensor every n seconds and send consumption to DomoticZ every minute
-  float HeaterPower=0;
+  // Read power usage sensor every n seconds and send it to DomoticZ every minute
+  LastHeaterPower = HeaterPower;
   unsigned long min = millis() / ( 60000 / READINGS_PER_MINUTE );
   if ( min < timer ) timer=min; //  millis() was reset (every 50 days)    
 	if ( min > timer  ) {
@@ -518,7 +557,9 @@ void loop() {
             unsigned long prevMicros = micros() - sampleInterval;
             while (count < numSamples) {
                if( micros() - prevMicros >= sampleInterval ) {
-                   adc_raw = analogRead(A0) - Vadc_Zero;
+                   adc_raw = analogRead(A0);
+                   Vadc_Zero = Vadc_Zero + ( adc_raw - Vadc_Zero)/1024; // Low Pass Filter to update/adjust Vadc_Zero
+                   adc_raw -= Vadc_Zero;
                    currentAcc += (unsigned long)(adc_raw * adc_raw);
                    ++count;
                    prevMicros += sampleInterval;
@@ -527,16 +568,47 @@ void loop() {
             // Calculate now Arms
             // The ratio conversion comes from solving for X : ((ESP8266 max analog input voltage * ACS712_Voltage_Divider) / X) = (ACS712 sensitivity / 1 A)
             // i.e. the output of the ACS712-20 (the 20A version) is 100mV/A, so 4.3V would correspond to 43A, and the ratio conversion would be 43.0 to get the output in amps.
-            float Arms = sqrt((float)currentAcc/(float)numSamples) * ( ( ACS712_Voltage_Divider * 1 / HEATER_ACS712_VperA[thisHEATER] ) / 1023.0 );
-            if( Arms < ARMS_NO_LOAD ) Arms = 0; // ACS712 readings at no load situation are between 0.15 and 0.20 A. Readings below ARMS_NO_LOAD are assumed to be zero
-            Vadc_Max = Vadc_Zero + ( ( 1023 * Arms * HEATER_ACS712_VperA[thisHEATER] ) / (ACS712_Voltage_Divider * 0.707 ) ); Vadc_Min = Vadc_Zero - ( Vadc_Max - Vadc_Zero);
+            float Arms = sqrt((float)currentAcc/(float)numSamples) * ( ( ACS712_Voltage_Divider * 1 / HEATER_ACS712_VperA[thisHEATER] ) / 1024.0 );
+            Serial.print("RAW READING Heater AC Current in A is : ");  Serial.println(Arms); 
+            if( Arms < (1.2 * Arms_No_Load) ) Arms = 0; // ACS712 readings at no load situation are between 0.15 and 0.20 A. Readings below Arms_No_Load are assumed to be zero
+            Vadc_Max = Vadc_Zero + ( ( 1024 * Arms * HEATER_ACS712_VperA[thisHEATER] ) / (ACS712_Voltage_Divider * 0.707 ) ); Vadc_Min = Vadc_Zero - ( Vadc_Max - Vadc_Zero );
+            if( Vadc_Min > Vadc_Max ) Vadc_Min = Vadc_Max;
             HeaterPower = 230*Arms;
+            Serial.print("New Filtered Vadc_Zero value : ");      Serial.println(Vadc_Zero);      
             Serial.print("Vadc_Min corresponding value : ");      Serial.println(Vadc_Min);      
             Serial.print("Vadc_Max corresponding value : ");      Serial.println(Vadc_Max);      
             Serial.print("Heater AC Current in A is : ");         Serial.println(Arms);      
-            Serial.print("Heater Power consumption in Wh is : "); Serial.println(HeaterPower);
-            if( HEATER_POWER[thisHEATER] != 0 ) // If "Trigger Assisted Mode" used (i.e. use Nominal Power declared here in HEATER_POWER[NBR_HEATERS+1] and set current power reading to 0 or Nominal Power)
-                if ( HeaterPower <= ( HEATER_POWER[thisHEATER]/2 ) ) HeaterPower=0; else HeaterPower=HEATER_POWER[thisHEATER];     
+            Serial.print("Heater Power usage in W is : ");        Serial.println(HeaterPower);    
+            if( HEATER_POWER[thisHEATER] != 0 ) { // If Non ACS712 raw mode, i.e. using Heater Nominal Power Self Learing or Heater Nominal Power declared in DomoticZ device name
+                if( HeaterPower >= 0.8 * HEATER_POWER[thisHEATER] ) {
+                    if( SelfLearningNumSamples <= STOP_SELF_LEARNING ) NominalPowerSelfLearning += HeaterPower; 
+                    HeaterPower = HEATER_POWER[thisHEATER];                   
+                    if( SelfLearningNumSamples != 0 && SelfLearningNumSamples <= STOP_SELF_LEARNING ) { 
+                        HEATER_POWER[thisHEATER] = NominalPowerSelfLearning / ++SelfLearningNumSamples;
+                        HeaterPower = HEATER_POWER[thisHEATER];
+                        Serial.print( "NEW HEATER NOMINAL POWER TARGET (Self Learning Update Number): "); Serial.print( HEATER_POWER[thisHEATER] ); Serial.print(" ("); Serial.print( SelfLearningNumSamples ); Serial.println(")"); 
+                    } // if( SelfLearningNumSamples != 0 ) {                                                     
+                } // if( HeaterPower >= 0.8 * HEATER_POWE
+                else if( HeaterPower > 0 ) {  // Assuming Heater switching from non heating to heating or the opposite 
+                         if( LastHeaterPower == 0 ) HeaterPower=HEATER_POWER[thisHEATER]; 
+                         else { 
+                             HeaterPower=0; 
+                             if( SelfLearningNumSamples == 1 )
+                                 if( ++NominalPowerOutOfRange == FALSE_HEATER_NOMINAL_POWER ) { 
+                                     HEATER_POWER[thisHEATER] /= 2;
+                                     NominalPowerSelfLearning = HEATER_POWER[thisHEATER];
+                                     NominalPowerOutOfRange = 0;
+                                     Serial.print( "NEW HEATER NOMINAL POWER TARGET (Self Learning Update Number): "); Serial.print( HEATER_POWER[thisHEATER] ); Serial.print(" ("); Serial.print( SelfLearningNumSamples ); Serial.println(")");
+                                 }  // if( ++NominalPowerOutOfRange == FALSE_HEATER_NOMIN
+                         } // if( LastHeaterPower == 0 )
+                } // else if( HeaterPower > 0 ) {    
+                Vadc_Max = Vadc_Zero + ( ( 1024 * (HeaterPower/230) * HEATER_ACS712_VperA[thisHEATER] ) / (ACS712_Voltage_Divider * 0.707 ) ); Vadc_Min = Vadc_Zero - ( Vadc_Max - Vadc_Zero ); 
+                if( Vadc_Min > Vadc_Max ) Vadc_Min = Vadc_Max;  
+                Serial.print("FILTERED Vadc_Min corresponding value : ");      Serial.println(Vadc_Min);      
+                Serial.print("FILTERED Vadc_Max corresponding value : ");      Serial.println(Vadc_Max);                  
+                Serial.print("FILTERED Heater AC Current in A is : ");         Serial.println(HeaterPower/230);      
+                Serial.print("FILTERED Heater Power usage in W is : ");        Serial.println(HeaterPower);
+            } // if( HEATER_POWER[thisHEATER] != 0 )
             HEATER_CONSUMPTION_LAST_MINUTE[LastReadingPointer++] = HeaterPower;
             if( LastReadingPointer == READINGS_PER_MINUTE) {             
                 // Log to Monitoring topic for monitoring/debugging the analog/digital ADC values read
@@ -547,52 +619,20 @@ void loop() {
                 if ( client.publish(topic_Heating_IN, msgToPublish) ) Serial.println("OK"); else Serial.println("KO"); 
             } // if( LastReadingPointer == READINGS_PER_MINUTE) { 
         }  // if( HEATER_METER_IDX[thisHEATER] == ACS712RMS ) {          
-        
-        if( HEATER_SENSOR[thisHEATER] == ACS712 ) {     
-            // read ADC to get ACS712 AC Amperes measure
-            // According to the ESP8266 datasheet, the ADC pin has 10 bit resolution. This means that your analog reading will return a value between 0 to 1023.
-            // The ADC only converts voltage between 0 and 1 Volts, so you need to make sure that you are using a device that only outputs 1V
-            // Otherwise you might need to use a voltage divider     
-            int Vadc_Min = 1023; // Max Voltage digital sampling read with analogRead
-            int Vadc_Max = 0;    // Min Voltage digital sampling read with analogRead
-            int Vadc = 0;
-            uint32_t start_time = millis();
-            while((millis()-start_time) < 1000) { //sample for 1 Sec 
-               Vadc = analogRead(A0);
-               if ( Vadc <= Vadc_Min ) Vadc_Min = Vadc;
-               if  (Vadc >= Vadc_Max ) Vadc_Max = Vadc;
-            }  
-            float Arms = ( ACS712_Voltage_Divider * 0.707 * ( (Vadc_Max - Vadc_Min) / 2 ) / 1023  ) / HEATER_ACS712_VperA[thisHEATER];
-            HeaterPower = 230*Arms;
-            Serial.print("Vadc_Min value read : ");                Serial.println(Vadc_Min);      
-            Serial.print("Vadc_Max value read : ");                Serial.println(Vadc_Max);      
-            Serial.print("Heater AC Current in A is : ");          Serial.println(Arms);      
-            Serial.print("Heater Power consumption in Wh is : ");  Serial.println(HeaterPower);
-            // notice ACS712+ADC system with this algorithm is not accurate enough to store raw data readings. Instead we store 0 or HEATER_POWER[thisHEATER] for power consumption which is like an heater actually works.
-            if ( HeaterPower <= ( HEATER_POWER[thisHEATER]/2 ) ) HeaterPower=0; else HeaterPower=HEATER_POWER[thisHEATER];   
-            HEATER_CONSUMPTION_LAST_MINUTE[LastReadingPointer++] = HeaterPower;
-            if( LastReadingPointer == READINGS_PER_MINUTE) {                            
-                // Log to Monitoring topic for monitoring/debugging the analog/digital ADC values read
-                String string = "{\"command\" : \"addlogmessage\", \"message\" : \"idx : " +   HEATER_METER_IDX[thisHEATER] + ", HeaterActive=" + HEATER_ACTIVE[thisHEATER] + ", Vadc_Min/Max=" + Vadc_Min + "/" + Vadc_Max + "\"}";
-                string.toCharArray( msgToPublish, MQTT_MAX_PACKET_SIZE);
-                Serial.print(msgToPublish);
-                Serial.print(" Published to heating/in Topic. Status=");
-                if ( client.publish(topic_Heating_IN, msgToPublish) ) Serial.println("OK"); else Serial.println("KO");  
-            }  // if( LastReadingPointer == READINGS_PER_MINUTE) { 
-        }  // if( HEATER_METER_IDX[thisHEATER] == ACS712 ) {   
-        
+              
         if( HEATER_SENSOR[thisHEATER] == THERMOSTAT ) {    
             // read Thermostat switch via GPIO
             byte Thermostat_GPIO = digitalReadF(Thermostat_Switch);
-            if( Thermostat_GPIO == 0 ) HeaterPower = HEATER_POWER[thisHEATER];
+            if( Thermostat_GPIO == 0 ) HeaterPower = HEATER_POWER[thisHEATER]; else HeaterPower = 0; 
             HEATER_CONSUMPTION_LAST_MINUTE[LastReadingPointer++] = HeaterPower;
             float Arms = (float)HeaterPower / 230;
-            int Vadc_Max = Vadc_Zero + ( ( 1023 * Arms * HEATER_ACS712_VperA[thisHEATER] ) / (ACS712_Voltage_Divider * 0.707 ) ); int Vadc_Min = Vadc_Zero - ( Vadc_Max - Vadc_Zero);
+            int Vadc_Max = Vadc_Zero + ( ( 1024 * Arms * HEATER_ACS712_VperA[thisHEATER] ) / (ACS712_Voltage_Divider * 0.707 ) ); int Vadc_Min = Vadc_Zero - ( Vadc_Max - Vadc_Zero);
+            if( Vadc_Min > Vadc_Max ) Vadc_Min = Vadc_Max;
             Serial.print("Thermostat(O=Close.ON/1=Open.OFF) : "); Serial.println(Thermostat_GPIO);   
             Serial.print("Vadc_Min corresponding value : ");      Serial.println(Vadc_Min);      
             Serial.print("Vadc_Max corresponding value : ");      Serial.println(Vadc_Max);      
             Serial.print("Heater AC Current in A is : ");         Serial.println(Arms);      
-            Serial.print("Heater Power consumption in Wh is : "); Serial.println(HeaterPower);
+            Serial.print("Heater Power usage in W is : ");        Serial.println(HeaterPower);
             if( LastReadingPointer == READINGS_PER_MINUTE) {    
                 // Log to Monitoring topic for monitoring/debugging the thermostat status
                 // String string = "{\"command\" : \"addlogmessage\", \"message\" : \"idx : " +   HEATER_METER_IDX[thisHEATER] + ", HeaterActive=" + HEATER_ACTIVE[thisHEATER] + ", Thermostat(O=Close/1=Open)=" + Thermostat_GPIO + "\"}";
@@ -604,7 +644,7 @@ void loop() {
             } // if( LastReadingPointer == READINGS_PER_MINUTE) { 
         } // if( HEATER_METER_IDX[thisHEATER] == THERMOSTAT ) {    
               
-        // send now new Power consumption index to DomoticZ        
+        // send now new Power usage index to DomoticZ        
         if( LastReadingPointer == READINGS_PER_MINUTE) {  
             for( LastReadingPointer = 0, HeaterPower=0 ; LastReadingPointer < READINGS_PER_MINUTE; LastReadingPointer++ ) HeaterPower += HEATER_CONSUMPTION_LAST_MINUTE[LastReadingPointer]; 
             HeaterPower /= READINGS_PER_MINUTE;
@@ -612,10 +652,10 @@ void loop() {
             if( HEATER_METER_IDX[thisHEATER] != DUMMY_IDX ) {
                 if( HPWh != -1 && HCWh != -1 ) {  // HPWh or HCWh equal to -1 means we didn't receive at boot (MQTT connection) the latest Energy meter stored for this heater at DomoticZ.
                                                   // Can only happen if at boot time, MQTT was available but not yet DomoticZ     
-                    if ( Tariff == "HP" ) HPWh = HPWh + HeaterPower/60 + (int)Decimal_Wh;      // we are here every minute, so additional Wh Consumption to add every minute to the meter is Power/60
+                    if ( Tariff == "HP" ) HPWh = HPWh + HeaterPower/60 + (int)Decimal_Wh;      // we are here every minute, so additional Wh usage to add every minute to the meter is Power/60
                     else HCWh = HCWh + HeaterPower/60  + (int)Decimal_Wh;
                     Serial.print("\n== Updating Domoticz. Average Power used : "); Serial.print(HeaterPower);
-                    Serial.print(", Wh Consumption added to index meter : ");      Serial.print( (int)(HeaterPower/60) + (int)Decimal_Wh );                                    
+                    Serial.print(", Wh Usage added to index meter : ");      Serial.print( (int)(HeaterPower/60) + (int)Decimal_Wh );                                    
                     Decimal_Wh = Decimal_Wh - (int)Decimal_Wh + HeaterPower/60 - (int)( HeaterPower/60 );   // Keep Wh decimal part for next updates
                     Serial.print(", Wh Decimal Part kept for next update : ");     Serial.println(Decimal_Wh);
                     String string = "{\"idx\" : " + HEATER_METER_IDX[thisHEATER] + ", \"nvalue\" : 0, \"svalue\" : \"" + HPWh + ";" + HCWh + ";0;0;" + (int)HeaterPower + ";0\"}"; 
@@ -624,7 +664,7 @@ void loop() {
                     Serial.print(" Published to domoticz/in. Status=");
                     if ( client.publish(topic_Domoticz_IN, msgToPublish) ) Serial.println("OK\n"); else Serial.println("KO\n");  
                 } else {
-                    // Ask again DomoticZ to publish Heating mode, Curent Tariff HP or HC and Last consumption index meter stored for this heater 
+                    // Ask again DomoticZ to publish Heating mode, Curent Tariff HP or HC and Index meter for this heater 
                     strcpy(msgToPublish,"{\"command\": \"getdeviceinfo\", \"idx\": 17}");
                     Serial.print(msgToPublish);
                     Serial.print("Published to domoticz/in. Status=");
