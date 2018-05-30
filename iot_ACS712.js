@@ -1,10 +1,11 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 // ***** Domoticz script to compute overall heaters consumption, update heating energy (kWh) forecast and house thermal characteristics (thermal loss and cooling rates) *****
-// V0.37 - December 2017 
+// V0.4 - May 2018  
 
 const VERBOSE                 = false; // logging verbose or not
 var   Rollback                = false; // Flag to mention we have to rollback main P1 smart meter to last values and do not update it because we didn't success to reach one of the (or all) DomoticZ heaters meters 
 const PollingTimer            = 5;     // Update DomoticZ every n minutes
+const SENSOR_TIME_OUT         = 5*60*1000; // 5 mn in ms 
 
 //  House thermal characteristics  
 const House_H_Ratio           = 262;  // H ratio used for now (house thermal loss rate)= U*Surface -- Unit W/K or W/°C 
@@ -39,15 +40,17 @@ var TOTAL_POWER          = 0;      // Actual Power W in use
 var TOTAL_4CAST_POWER    = 0;      // Power W needed forecast
 
 // DomoticZ heater meters
-var IDX_Convecteur       = ['27', '28', '29', '30', '31', '35', '36', '37', '38']; 
+const IDX_Convecteur          = ['27', '28', '29', '30', '31', '35', '36', '37', '38']; 
+const IDX_OverallHeatersMeter = 33;
+const IDX_HotWaterTank        = 34;        
 
 // JSON URLs to read/write DomoticZ
 var httpDomoticz = require('http');
-var UpdateOverallHeatersMeter = {
+var SetHeaterMeter = {
 host: 'localhost',
 port: 8084,
 path: '',
-base_path: '/json.htm?type=command&param=udevice&idx=33&nvalue=0&svalue=' // + USAGE_HP + ';' + USAGE_HC+ ';' + FORECAST_HP + ';' + FORECAST_HC + ';' + TOTAL_POWER + ';' + TOTAL_4CAST_POWER
+base_path: '/json.htm?type=command&param=udevice&idx=' // + IDX + '&nvalue=0&svalue=' + USAGE_HP + ';' + USAGE_HC+ ';' + FORECAST_HP + ';' + FORECAST_HC + ';' + TOTAL_POWER + ';' + TOTAL_4CAST_POWER
 };
 var GetOverallHeatersMeter = {
 host: 'localhost',
@@ -99,7 +102,6 @@ path: '/json.htm?type=devices&rid=32'
 };
 
 
-
 // ******* INIT
 console.log("*** " + new Date() + " - Domoticz iot_ACS712 started ***\n");
 httpDomoticz.get(GetOverallHeatersMeter, function(resp) {   // Get latest Energy forecast stored
@@ -133,8 +135,8 @@ setInterval(function(){ // compute overall Heater consumptions and update h/r ra
           FORECAST_HP = parseInt( FORECAST_HP ); FORECAST_HC = parseInt( FORECAST_HC ); TOTAL_4CAST_POWER = parseInt( TOTAL_4CAST_POWER ); 
           if( VERBOSE ) console.log("Overall heaters - PREVIOUS HP/HC Consumption (Wh)=" + PREVIOUS_USAGE_HP + "/" + PREVIOUS_USAGE_HC);
           if( VERBOSE ) console.log("Overall heaters - CURRENT HP/HC Consumption/Forecast//Power (Wh/Wh//W)=" + USAGE_HP + "/" + USAGE_HC + "/" + FORECAST_HP  + "/"  + FORECAST_HC + "//" + TOTAL_POWER + "/" + TOTAL_4CAST_POWER);  
-          UpdateOverallHeatersMeter.path = UpdateOverallHeatersMeter.base_path + USAGE_HP + ';' + USAGE_HC+ ';' + FORECAST_HP + ';' + FORECAST_HC + ';' + TOTAL_POWER + ';' + TOTAL_4CAST_POWER;
-          httpDomoticz.get( UpdateOverallHeatersMeter, function(resp){
+          SetHeaterMeter.path = SetHeaterMeter.base_path + IDX_OverallHeatersMeter + '&nvalue=0&svalue=' + USAGE_HP + ';' + USAGE_HC+ ';' + FORECAST_HP + ';' + FORECAST_HC + ';' + TOTAL_POWER + ';' + TOTAL_4CAST_POWER;
+          httpDomoticz.get( SetHeaterMeter, function(resp){
              resp.on('data', function(ReturnStatus){ 
                 if( VERBOSE ) console.log("Overall Heaters Consumption and Forecast logged " + ReturnStatus);
              });
@@ -150,27 +152,28 @@ setInterval(function(){ // compute overall Heater consumptions and update h/r ra
       
       // Compute and log H and r ratios (using DegresDays calculated beginning of polling period)
       var DegresDay = ( PreviousIndoorTemp-HouseInternalHeatGain-PreviousOutdoorTemp ) * ( PollingTimer / (24*60) );
-      if( DegresDay < 0 ) DegresDay = 0;
+      // if( DegresDay < 0 ) DegresDay = 0;
       if( VERBOSE ) console.log("DegresDay=" + DegresDay);
-      if( Steady && !Rollback ) { // compute and log H ratio
-             if( DegresDay > 0) {
-                  TL_Ratio = ( USAGE_HP + USAGE_HC - PREVIOUS_USAGE_HP - PREVIOUS_USAGE_HC ) / DegresDay;
-                  if( VERBOSE ) console.log("Thermal Loss ratio=", TL_Ratio);
-                  TL_Ratio=TL_Ratio.toFixed(0);
-                  log_H_Ratio.path = log_H_Ratio.base_path + TL_Ratio;
-                  httpDomoticz.get( log_H_Ratio, function(resp){
-                     resp.on('data', function(ReturnStatus){ 
-                        if( VERBOSE ) console.log("Thermal Loss ratio updated " + ReturnStatus);
-                     });
-                  }).on("error", function(e){
-                       console.log("Error - Can't update DomoticZ Thermal Loss ratio: " + e.message);
-                  });
-             }
+      TL_Ratio=0;
+      if( Steady && !Rollback ) { // compute and log H ratio      		 
+      		 if( DegresDay > 0) {
+      			  TL_Ratio = ( USAGE_HP + USAGE_HC - PREVIOUS_USAGE_HP - PREVIOUS_USAGE_HC ) / DegresDay;
+      			  TL_Ratio=TL_Ratio.toFixed(0);
+      		 }
       } // if( Steady  { // compute and log H ratio
-      
+      if( VERBOSE ) console.log("Thermal Loss ratio=", TL_Ratio);
+      log_H_Ratio.path = log_H_Ratio.base_path + TL_Ratio;
+      httpDomoticz.get( log_H_Ratio, function(resp){
+        resp.on('data', function(ReturnStatus) {
+           if( VERBOSE ) console.log("Thermal Loss ratio updated " + ReturnStatus);
+        });
+      }).on("error", function(e){
+           console.log("Error - Can't update DomoticZ Thermal Loss ratio: " + e.message);
+      });    
+            
       // if( HeatingSelector === 0 ||  HeatingSelector === 10 ) { // compute and log -1 * r_ratio  
-             if( DegresDay != 0) {  
-                  var Ir_Ratio = ( IndoorTemp - PreviousIndoorTemp ) / DegresDay; 
+             if( PreviousIndoorTemp-PreviousOutdoorTemp != 0) {  
+                  var Ir_Ratio = ( IndoorTemp - PreviousIndoorTemp ) / ( ( PreviousIndoorTemp-PreviousOutdoorTemp ) * ( PollingTimer / (24*60) ) ); 
                   if( DegresDay < 0) Ir_Ratio *= -1;
                   if( VERBOSE ) console.log("Instantaneous Cooling Rate=", Ir_Ratio);
                   if( VERBOSE ) console.log("r_Ratio_index=", r_Ratio_index);
@@ -255,6 +258,8 @@ setInterval(function(){ // compute overall Heater consumptions and update h/r ra
   if( VERBOSE ) console.log("Heating Steady Phase=" + Steady);
   
   // Get update of each heater meter and compute overall consumption
+  // Also check lastSeen of each Heaters and eventually reset their Power Usage
+  var cTime = ( new Date() ).getTime(); // Return number of milliseconds since January 1,1970,00:00 UTC
   Rollback=false;
   PREVIOUS_USAGE_HP = USAGE_HP; PREVIOUS_USAGE_HC = USAGE_HC;
   TOTAL_POWER = 0; USAGE_HP = 0; USAGE_HC= 0;
@@ -263,17 +268,58 @@ setInterval(function(){ // compute overall Heater consumptions and update h/r ra
     httpDomoticz.get(GetHeaterMeter, function(resp){
       resp.on('data', function(JSONHeaterMeter){
          const HeaterMeter = JSON.parse(JSONHeaterMeter);   
-         var data = HeaterMeter.result[0].Data.split(";");             
+         var data = HeaterMeter.result[0].Data.split(";");  
+         var PowerUsage = parseInt( data[4] );
+         var HPindex    = parseInt( data[0] );
+         var HCindex    = parseInt( data[1] );
          if( VERBOSE ) console.log("Heater: " + HeaterMeter.result[0].Name + " - HP/HC Consumption//Power (Wh/Wh//W)=" + data[0] + "/" + data[1] + "//" + data[4] );  
          TOTAL_POWER += parseInt( data[4] );
          USAGE_HP    += parseInt( data[0] );
          USAGE_HC    += parseInt( data[1] );
+         var lastSeen = ( new Date( HeaterMeter.result[0].LastUpdate ) ).getTime();
+         if( cTime-lastSeen > SENSOR_TIME_OUT && PowerUsage != 0 ) {
+             if( VERBOSE ) console.log("Resetting DomoticZ Meter Power Usage for Heater: " + HeaterMeter.result[0].Name);
+             SetHeaterMeter.path = SetHeaterMeter.base_path + HeaterMeter.result[0].idx + '&nvalue=0&svalue=' + HPindex + ';' + HCindex + ';0;0;0;0';
+             httpDomoticz.get( SetHeaterMeter, function(resp){
+                resp.on('data', function(ReturnStatus){ 
+                if( VERBOSE ) console.log("DomoticZ Meter Power Usage Reset for a Heater: " + ReturnStatus);
+             });
+             }).on("error", function(e){
+                console.log("Error - Can't reset one the DomoticZ Heater Meter Power Usage: " + e.message);
+             });
+         } // if( cTime-lastSeen > SENSOR_TIME_OUT ) {
       }); //resp.on('data', function(JSONSHeater
     }).on("error", function(e){
          console.log("Error - Can't get one of the DomoticZ Heater Meter: " + e.message);
          Rollback=true;
     }); // httpDomoticz.get(GetHeaterMeter, function(resp){
-  } // for(var i = 0, TOTAL_POWER = 0, USAGE_HP
+  } // for(var i = 0 ; i < IDX_Convecteur
+  
+  // Check lastSeen of HotWatertank and eventually reset its Power Usage
+  GetHeaterMeter.path = GetHeaterMeter.base_path + IDX_HotWaterTank;
+  httpDomoticz.get(GetHeaterMeter, function(resp){
+    resp.on('data', function(JSONHeaterMeter){
+         const HeaterMeter = JSON.parse(JSONHeaterMeter);
+         var data = HeaterMeter.result[0].Data.split(";"); 	
+         var PowerUsage = parseInt( data[4] );
+         var HPindex    = parseInt( data[0] );
+         var HCindex    = parseInt( data[1] );	
+         if( VERBOSE ) console.log("Heater: " + HeaterMeter.result[0].Name + " - HP/HC Consumption//Power (Wh/Wh//W)=" + data[0] + "/" + data[1] + "//" + data[4] );
+         var lastSeen = ( new Date( HeaterMeter.result[0].LastUpdate ) ).getTime();
+         if( cTime-lastSeen > SENSOR_TIME_OUT && PowerUsage != 0 ) {
+             SetHeaterMeter.path = SetHeaterMeter.base_path + IDX_HotWaterTank + '&nvalue=0&svalue=' + HPindex + ';' + HCindex + ';0;0;0;0';
+             httpDomoticz.get( SetHeaterMeter, function(resp){
+                resp.on('data', function(ReturnStatus){ 
+                if( VERBOSE ) console.log("DomoticZ Index Meter Power Usage Reset for HotWaterTank: " + ReturnStatus);
+             });
+             }).on("error", function(e){
+                console.log("Error - Can't reset DomoticZ Index Meter Power Usage for HotWaterTank: " + e.message);
+             });
+         } // if( cTime-lastSeen > SENSOR_TIME_OUT ) {
+    }); //resp.on('data', function(JSONSHeater
+  }).on("error", function(e){
+       console.log("Error - Can't get DomoticZ Heater Meter for HotWaterTank - " + e.message);
+  }); // httpDomoticz.get(GetHeaterMeter, function(resp){
 
 }, PollingTimer*60000); // setInterval(function(){  
 
