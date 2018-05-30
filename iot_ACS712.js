@@ -1,6 +1,6 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 // ***** Domoticz script to compute overall heaters consumption, update heating energy (kWh) forecast and house thermal characteristics (thermal loss and cooling rates) *****
-// V0.4 - May 2018  
+// V0.45 - May 2018 
 
 const VERBOSE                 = false; // logging verbose or not
 var   Rollback                = false; // Flag to mention we have to rollback main P1 smart meter to last values and do not update it because we didn't success to reach one of the (or all) DomoticZ heaters meters 
@@ -174,7 +174,7 @@ setInterval(function(){ // compute overall Heater consumptions and update h/r ra
       // if( HeatingSelector === 0 ||  HeatingSelector === 10 ) { // compute and log -1 * r_ratio  
              if( PreviousIndoorTemp-PreviousOutdoorTemp != 0) {  
                   var Ir_Ratio = ( IndoorTemp - PreviousIndoorTemp ) / ( ( PreviousIndoorTemp-PreviousOutdoorTemp ) * ( PollingTimer / (24*60) ) ); 
-                  if( DegresDay < 0) Ir_Ratio *= -1;
+                  if( (PreviousIndoorTemp-PreviousOutdoorTemp) < 0 ) Ir_Ratio *= -1;
                   if( VERBOSE ) console.log("Instantaneous Cooling Rate=", Ir_Ratio);
                   if( VERBOSE ) console.log("r_Ratio_index=", r_Ratio_index);
                   if( VERBOSE ) console.log("r_Ratio_subset size=", r_Ratio_subset);
