@@ -1,6 +1,7 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 // ***** Domoticz script to compute overall heaters consumption, update heating energy (kWh) forecast and house thermal characteristics (thermal loss and cooling rates) *****
-// V0.45 - May 2018 
+// V0.46 - June 2018
+          // IMPROVEMENT : cooling rate moving average set to 4 hours
 
 const VERBOSE                 = false; // logging verbose or not
 var   Rollback                = false; // Flag to mention we have to rollback main P1 smart meter to last values and do not update it because we didn't success to reach one of the (or all) DomoticZ heaters meters 
@@ -24,7 +25,7 @@ var PreviousOutdoorTemp  = -150;   // Previous Outdoor Temperature (previous sen
 var IndoorTemp           = -150;   // Current House Indoor Temperature
 var PreviousIndoorTemp   = -150;   // Previous House Indoor Temperature
 var TL_Ratio             = 0;      // Energy Wh consumption per °C due to House Thermal loss  (i.e. Wh consumed EACH day for ONE degree difference between indoor and outdoor temperature). TL_Ratio = 24 * 1 (heure) * House_H_Ratio
-const r_Ratio_subset     = (1/2 * 60/PollingTimer); // 30 mn subset moving average
+const r_Ratio_subset     = (4 * 60/PollingTimer); // 4 hours subset moving average
 var r_Ratio              = [0];    // House Cooling rate. 30 mn individual subset values
 var MA_r_Ratio           = 0;      // Moving average r_Ratio computed
 var r_Ratio_index        = 0;      // to access individual subset values
@@ -178,24 +179,28 @@ setInterval(function(){ // compute overall Heater consumptions and update h/r ra
                   if( VERBOSE ) console.log("Instantaneous Cooling Rate=", Ir_Ratio);
                   if( VERBOSE ) console.log("r_Ratio_index=", r_Ratio_index);
                   if( VERBOSE ) console.log("r_Ratio_subset size=", r_Ratio_subset);
-                  if( r_Ratio_index < r_Ratio_subset) r_Ratio[r_Ratio_index++] = Ir_Ratio;
+                  if( r_Ratio_index < r_Ratio_subset) { 
+                     r_Ratio[r_Ratio_index++] = Ir_Ratio;
+                     for( var i=0, MA_r_Ratio=0 ; i < r_Ratio_index; i++ ) MA_r_Ratio += r_Ratio[i];
+                     MA_r_Ratio /= r_Ratio_index; 
+                  }
                   else {
                      MA_r_Ratio = 0;
                      for( r_Ratio_index=0; r_Ratio_index < r_Ratio_subset-1; r_Ratio_index++ ) { r_Ratio[r_Ratio_index] = r_Ratio[r_Ratio_index+1];  MA_r_Ratio += r_Ratio[r_Ratio_index] }
                      r_Ratio[r_Ratio_index++] = Ir_Ratio; MA_r_Ratio += Ir_Ratio;
                      MA_r_Ratio /= r_Ratio_subset; 
-                     if( VERBOSE ) console.log("Moving average Cooling Rate=", MA_r_Ratio); 
-                     MA_r_Ratio = MA_r_Ratio.toFixed(1);               
-                     log_r_Ratio.path = log_r_Ratio.base_path + MA_r_Ratio;
-                     httpDomoticz.get( log_r_Ratio, function(resp){
-                       resp.on('data', function(ReturnStatus){ 
+                  }  // if( r_Ratio_index < r_Ratio_subset
+                  if( VERBOSE ) console.log("Moving average Cooling Rate=", MA_r_Ratio); 
+                  MA_r_Ratio = MA_r_Ratio.toFixed(1);               
+                  log_r_Ratio.path = log_r_Ratio.base_path + MA_r_Ratio;
+                  httpDomoticz.get( log_r_Ratio, function(resp){
+                      resp.on('data', function(ReturnStatus){ 
                           if( VERBOSE ) console.log("Cooling Rate updated " + ReturnStatus);
                        });
-                     }).on("error", function(e){
-                         console.log("Error - Can't update DomoticZ Cooling Rate: " + e.message);
-                     });
-                  }  // if( r_Ratio_index < r_Ratio_subset
-             } // if( DegresDay != 0)
+                  }).on("error", function(e){
+                        console.log("Error - Can't update DomoticZ Cooling Rate: " + e.message);
+                  });
+             } // if( PreviousIndoorTemp-PreviousOutdoorTemp != 0) {  
       // } // if( HeatingSelector === 0 ||  HeatingSelector === 10 ) { // compute and log 1/r ratio
 
   } // *** If not first run, log energy consumption/forecast and H/r ratios update *** 

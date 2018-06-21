@@ -1,5 +1,7 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 // ***** Temperature sensor using DHT22  *****
+// V0.26 - June 2018
+          // IMPROVEMENT : Further logging (when using Rob Tillaart library) about DHT22 reading errors  
 // V0.2  - June 2018 
           // Rob Tillaart library supported in addition to Adafruit one to interface the DHT22 sensor
           // Wifi mode set to STA only
@@ -10,8 +12,9 @@
 // V0.11 - March 2017  
           // Initial release 
           
-//#define   ADAFRUIT_LIB  true
-#define   ROBTILLAART_LIB true
+#define   ADAFRUIT_LIB  true
+// #define   ROBTILLAART_LIB true
+// #define   LOOPBACK_TEST_LIB  true
 #define   ANTORI_BOARD    true 
 #define   FIXED_IP_USED   true
 #include  "WiFi_OTA_MQTT_SecretKeys.h"
@@ -39,12 +42,12 @@ byte      mac[MAC_LENGTH];
 #include  <dht.h>
 #endif
 #ifdef    ANTORI_BOARD
-#define   DHTPIN                                     5         // Digital pin connected to DHT22
+#define   DHTPIN 5         // Digital pin connected to DHT22
 #endif
 #ifdef    EDRAGON_BOARD
 #define   DHTPIN                                     14
 #endif
-#define   DHTTYPE                                    DHT22
+#define   DHTTYPE DHT22
 #ifdef    ADAFRUIT_LIB
 DHT       dht(DHTPIN, DHTTYPE);
 #endif
@@ -95,11 +98,28 @@ float computeHeatIndex(float temperature, float percentHumidity, bool isFahrenhe
 } // float computeHeatIndex(float temperature, float percentHumidity, bool isFahrenheit)
 #endif
 
+#ifdef LOOPBACK_TEST_LIB
+#define FILTER 3 // N+1 same readings every DELAY_FILTER ms must be read to validate GPIO reading ! 
+#define DELAY_FILTER 100 // Delay in ms between two readings 
+// GPIO read using AC Filter
+byte digitalReadF(int GPIO) {
+  int i;
+  byte Reading = digitalRead(GPIO);
+  byte NextReading;
+  for( i=1; i <= FILTER ; i++ ) {
+    delay( DELAY_FILTER );
+    NextReading = digitalRead(GPIO);
+    if( NextReading != Reading ) { i = 1; Reading = NextReading; }
+  }
+  return( Reading );
+} // byte digitalReadF(GPIO) {
+#endif
+
 void handleRoot() {
   String answer;
-  char str_t[15];
-  char str_h[15];
-  char str_hic[15];
+  char str_t[25];
+  char str_h[25];
+  char str_hic[25];
   int sec = millis() / 1000;
   int min = sec / 60;
   int hr = min / 60;
@@ -116,15 +136,15 @@ void handleRoot() {
         // Serial.print("OK, ");
         break;
     case DHTLIB_ERROR_CHECKSUM:
-        strcpy( str_t, "DHT22 ERROR"); strcpy( str_h, "DHT22 ERROR"); strcpy( str_hic, "DHT22 ERROR");
+        strcpy( str_t, "DHT22 ERROR"); strcpy( str_h, "DHT22 CHECKSUM ERROR"); strcpy( str_hic, "DHT22 CHECKSUM ERROR");
         // Serial.print("Checksum error, ");
         break;
     case DHTLIB_ERROR_TIMEOUT:
-        strcpy( str_t, "DHT22 ERROR"); strcpy( str_h, "DHT22 ERROR"); strcpy( str_hic, "DHT22 ERROR");
+        strcpy( str_t, "DHT22 ERROR"); strcpy( str_h, "DHT22 TIMEOUT ERROR"); strcpy( str_hic, "DHT22 TIMEOUT ERROR");
         // Serial.print("Time out error, ");
         break;
     default:
-        strcpy( str_t, "DHT22 ERROR"); strcpy( str_h, "DHT22 ERROR"); strcpy( str_hic, "DHT22 ERROR");
+        strcpy( str_t, "DHT22 ERROR"); strcpy( str_h, "DHT22 UNKNOWN ERROR"); strcpy( str_hic, "DHT22 UNKNOWN ERROR");
         // Serial.print("Unknown error, ");
         break;
   } // switch (chk)
@@ -135,9 +155,15 @@ void handleRoot() {
   float h = dht.readHumidity();
   float hic;
   if ( isnan(t) )             strcpy( str_t,   "DHT22 ERROR");   else dtostrf(t, 5, 1, str_t);  
-  if ( isnan(h) )             strcpy( str_h,   "DHT22 ERROR");   else dtostrf(h, 5, 1, str_h); 
-  if ( isnan(t) || isnan(h) ) strcpy( str_hic, "DHT22 ERROR");   else { hic = dht.computeHeatIndex(t, h, false); dtostrf(hic, 5, 1, str_hic); }
+  if ( isnan(h) )             strcpy( str_h,   "DHT22 UNKNOWN ERROR");   else dtostrf(h, 5, 1, str_h); 
+  if ( isnan(t) || isnan(h) ) strcpy( str_hic, "DHT22 UNKNOWN ERROR");   else { hic = dht.computeHeatIndex(t, h, false); dtostrf(hic, 5, 1, str_hic); }
 #endif 
+
+#ifdef LOOPBACK_TEST_LIB
+  strcpy( str_t, "DHT22 ERROR");
+  strcpy( str_h, "GPIO LOOPBACK TEST"); 
+  dtostrf(  digitalReadF( DHTPIN ), 5, 1, str_hic );
+#endif
   
   answer = "{\n\"SensorID\":\"" + TEMP_SENSOR_ID[thisTEMP_SENSOR] + "\",\n\"Temperature_Celsius\":\"" + str_t + "\",\n\"Humidity_Percentage\":\"" + str_h + "\",\n\"HeatIndex_Celsius\":\"" + str_hic  +
               "\",\n\"Sensor_Elapse_Running_Time\":\"" + hr + ":" + min % 60 + ":" + sec % 60 + "\"\n}";   
@@ -150,8 +176,16 @@ void handleRoot() {
 
 void setup ( void ) {
 
+#ifdef ADAFRUIT_LIB
+  dht.begin();    // Set DHT items 
+#endif
+
+#ifdef LOOPBACK_TEST_LIB
+  pinMode(DHTPIN,INPUT); 
+#endif
+
 	Serial.begin (115200 );
-  Serial.println("iot_ESP8266_DHT22 Booting - Firmware Version : 0.2");
+  Serial.println("iot_ESP8266_DHT22 Booting - Firmware Version : 0.26");
    
   Serial.println("\nESP8266 hardware configuration :");
   Serial.print("ChipId: ");                   Serial.print( ESP.getChipId() );
@@ -164,10 +198,6 @@ void setup ( void ) {
   Serial.print(" - FlashChipRealSize: ");     Serial.print( ESP.getFlashChipRealSize() );
   Serial.print(" - FlashChipSize: ");         Serial.println( ESP.getFlashChipSize() );
   Serial.println();
-
-#ifdef ADAFRUIT_LIB
-  dht.begin();    // Set DHT items
-#endif
    
   // Find configuration main index 
   WiFi.macAddress(mac);

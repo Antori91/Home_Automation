@@ -1,6 +1,15 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 // ***** Script to poll ESP8266/DHT22 sensors every n minutes and then update Domoticz *****
+// V0.45 - June 2018
+            // IMPROVEMENT : Further logging about DHT22 reading errors   
 // V0.4 - September 2017 
+            // ** NEW FEATURE : If Temp sensors failure, raise TEMP SENSOR ALARM IDX in DomoticZ
+            // New update loop with Array of objects for sensors
+// V0.2d - Mars 2017 
+            // ** NEW FEATURE : Degrees-days logging. DJUCh/DJUCh IDX. 
+            // - Maxima/minima IDX removed (already available by DomoticZ "discrete values log" and "custom" graphs. Time of that events also available with DomoticZ) 
+// V0.1  - Mars 2017 
+            // Initial release 
 
 var httpDomoticz = require('http');
 var JSON_API = {
@@ -9,7 +18,7 @@ port: 8084,                //[$$DOMOTICZ_PARAMETER]
 path: '/'
 };
 
-const passwordProtectedDevice  = '$$YOUR_PASSWORD$$';   //[$$DOMOTICZ_PARAMETER]
+const passwordProtectedDevice  = 'XXXX';   //[$$DOMOTICZ_PARAMETER]
 const idxHeatingSelector       = '17';     //[$$DOMOTICZ_PARAMETER]
 const idxTempFailureFlag       = '43';     //[$$DOMOTICZ_PARAMETER]
 
@@ -77,10 +86,10 @@ lastHumStat: '-50',
 idxTempHum: 25,            //[$$DOMOTICZ_PARAMETER]
 idxHeatIndex: -1,      // -1 means no HeatIndex for this sensor
 ComputeDegreesDays: function( error, data, DegreesDaysValue ) {
-  // Compute Degrees-days with BaseTemp=18Â°C
-  // TEMP=DegrÃ©s-jour = (18Â°C - ExternalTemp) 
-  // HUM=DegrÃ©s-jour_Chauffage_Effectif% = 100 * ( (InternalTemp -1Â°C (apport occupant) - ExternalTemp) / (18Â°C - ExternalTemp) )
-  // Heating level 0/10/20/30 for OFF/HorsGel/Eco/Confort. If OFF or HorsGel, we assume Heating is Power Off (i.e DegrÃ©s-jour_Chauffage_Effectif%=0)
+  // Compute Degrees-days with BaseTemp=18°C
+  // TEMP=Degrés-jour = (18°C - ExternalTemp) 
+  // HUM=Degrés-jour_Chauffage_Effectif% = 100 * ( (InternalTemp -1°C (apport occupant) - ExternalTemp) / (18°C - ExternalTemp) )
+  // Heating level 0/10/20/30 for OFF/HorsGel/Eco/Confort. If OFF or HorsGel, we assume Heating is Power Off (i.e Degrés-jour_Chauffage_Effectif%=0)
   DegreesDaysValue.lastTemp=0; DegreesDaysValue.lastHumidity=100; DegreesDaysValue.lastHumStat='0';
   DegreesDaysValue.SensorUnavailable = ExternalSensor.SensorUnavailable;
   if ( !DegreesDaysValue.SensorUnavailable && ExternalSensor.lastTemp < 18 ) { DegreesDaysValue.lastTemp=(18-ExternalSensor.lastTemp); DegreesDaysValue.lastTemp=DegreesDaysValue.lastTemp.toFixed(1); }
@@ -101,8 +110,8 @@ var lastDaySeen     = new Date().getDate();
 // ***** INIT
 console.log("*** " + new Date() + " - Domoticz iot_ESP8266/DHT22 started ***\n");
 
-// ***** LOOP Ã  la Arduino mode...
-setInterval(function(){ // get Temp/Humidity from sensors every n minutes
+// ***** LOOP à la Arduino mode...
+setInterval(function(){ // get Temp/Humidity from sensors every n seconds/minutes
    
     // *** Print each day, the total number of DHT22 reading errors
     var Today = new Date().getDate();
@@ -125,7 +134,7 @@ setInterval(function(){ // get Temp/Humidity from sensors every n minutes
                      const CurrentSensorValue = JSON.parse(JSONSensor);                           
                      if( CurrentSensorValue.Temperature_Celsius === "DHT22 ERROR" ) {     // ESP8266 available but a DHT22 reading error occured 
                          value.SensorUnavailable++;  value.NbReadError++;
-                         ERROR_MESSAGE="Error - " + value.ID + " has returned a wrong value (NAN)";   
+                         ERROR_MESSAGE="Error - " + value.ID + " has returned a wrong value (NAN). Error code was " + CurrentSensorValue.Humidity_Percentage;   
                          ERROR_MESSAGE=ERROR_MESSAGE.replace(/ /g,"%20");
                          JSON_API.path = '/json.htm?type=command&param=addlogmessage&message=' + ERROR_MESSAGE;
                          DomoticzJsonTalk( JSON_API );  
