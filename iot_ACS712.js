@@ -1,12 +1,37 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 // ***** Domoticz script to compute overall heaters consumption, update heating energy (kWh) forecast and house thermal characteristics (thermal loss and cooling rates) *****
+// V0.5  - June 2018
+          // IMPROVEMENT : For better accuracy, stop computing instantaneous cooling rate if indoor temp within outdoor temp +/- 0.5°C range
 // V0.46 - June 2018
-          // IMPROVEMENT : cooling rate moving average set to 4 hours
+          // IMPROVEMENT : cooling rate moving average subset set to 4 hours
+// V0.45 - May 2018 
+          // CHANGE : Cooling ratio sign changed when (IndoorTemp-OutdoorTemp) < 0  insteaf of (IndoorTemp-1-OutdoorTemp) < 0
+// V0.4 - May 2018 
+          // IMPROVEMENT : Reset instantaneous POWER USAGE of a Heater index meter if Domoticz lastseen for this meter is greater than 5 mn. (For both Heaters and HotWaterTank)
+// V0.37 - December 2017 
+          // CHANGE : if verbose mode set, print heater instantaneous consumption
+// V0.36 - November 2017 
+          // IMPROVEMENT : Smooth out cooling rate using moving average ( 30 mn subset of instantaneous cooling rate). 
+          // CHANGE : Calculate cooling rate even if Degrees.Day < 0 (i.e. Outdoor temp > Indoor temp)
+// V0.35 - October 2017 
+          // BUG Correction: Avoid to reset MAIN P1 Smart Meter if we failed to reach DomoticZ heater meters (happens if DomoticZ DOWN then UP while this program running)
+// V0.3  - September 2017 
+          // NEW FEATURE : Compute House Cooling Rate characteristic
+// V0.2  - July 2017 
+          // IMPROVEMENT : Use an updated H coeff which includes air heating
+          // NEW FEATURE : Compute House Thermal Loss characteristic
+// V0.1  - July 2017 
+          // Initial release 
+
 
 const VERBOSE                 = false; // logging verbose or not
 var   Rollback                = false; // Flag to mention we have to rollback main P1 smart meter to last values and do not update it because we didn't success to reach one of the (or all) DomoticZ heaters meters 
 const PollingTimer            = 5;     // Update DomoticZ every n minutes
 const SENSOR_TIME_OUT         = 5*60*1000; // 5 mn in ms 
+
+// Energy Formulas used :  
+          //   To raise for 1°C the temperature of 1m3 air, thermal energy to supply is 1,256 kJ·= 1,256/3600 kWh (PS: 1 J =  1 Ws)
+          //   To raise for 1°C the temperature of 1m3 water, thermal energy to supply is 1,162 KWh // 1.162 * WaterConsommationPerYear * (HotWaterTemp-ColdWaterTemp) ) / ( 365 * 8 );   // = 1,833 KWh during 8 hours per day   
 
 //  House thermal characteristics  
 const House_H_Ratio           = 262;  // H ratio used for now (house thermal loss rate)= U*Surface -- Unit W/K or W/°C 
@@ -17,18 +42,19 @@ const WaterConsumptionPerYear = 96;   // Unit m3
 
 // House/heating items
 var Tariff;                        // Electricity supplier tariff to use depending on day period : HP (Heures pleines) or HC (Heures creuses)
-var HeatingSelector      = 0;      // Current heating mode selector (0/10/20/30 for OFF/HorsGel/Eco/Confort)
-var Steady               = false;  // Heating in steady mode : set to true if Indoor Temperature has reached one time Thermostat setpoint and HeatingSelector is ECO or Confort
-var Thermostat_setPoint  = -150;   // Initialized to -150 to indicate we are at the first run
-var OutdoorTemp          = -150;   // Current Outdoor temperature  (latest sensor polling)
-var PreviousOutdoorTemp  = -150;   // Previous Outdoor Temperature (previous sensor polling)  
-var IndoorTemp           = -150;   // Current House Indoor Temperature
-var PreviousIndoorTemp   = -150;   // Previous House Indoor Temperature
-var TL_Ratio             = 0;      // Energy Wh consumption per °C due to House Thermal loss  (i.e. Wh consumed EACH day for ONE degree difference between indoor and outdoor temperature). TL_Ratio = 24 * 1 (heure) * House_H_Ratio
-const r_Ratio_subset     = (4 * 60/PollingTimer); // 4 hours subset moving average
-var r_Ratio              = [0];    // House Cooling rate. 30 mn individual subset values
-var MA_r_Ratio           = 0;      // Moving average r_Ratio computed
-var r_Ratio_index        = 0;      // to access individual subset values
+var HeatingSelector        = 0;      // Current heating mode selector (0/10/20/30 for OFF/HorsGel/Eco/Confort)
+var Steady                 = false;  // Heating in steady mode : set to true if Indoor Temperature has reached one time Thermostat setpoint and HeatingSelector is ECO or Confort
+var Thermostat_setPoint    = -150;   // Initialized to -150 to indicate we are at the first run
+var OutdoorTemp            = -150;   // Current Outdoor temperature  (latest sensor polling)
+var PreviousOutdoorTemp    = -150;   // Previous Outdoor Temperature (previous sensor polling)  
+var IndoorTemp             = -150;   // Current House Indoor Temperature
+var PreviousIndoorTemp     = -150;   // Previous House Indoor Temperature
+var TL_Ratio               = 0;      // Energy Wh consumption per °C due to House Thermal loss  (i.e. Wh consumed EACH day for ONE degree difference between indoor and outdoor temperature). TL_Ratio = 24 * 1 (hour) * House_H_Ratio
+const r_Ratio_subset       = (4 * 60/PollingTimer); // 4 hours subset moving average
+var r_Ratio                = [0];    // House Cooling rate. 30 mn individual subset values
+var MA_r_Ratio             = 0;      // Moving average r_Ratio computed
+var r_Ratio_index          = 0;      // to access individual subset values
+const OUTDOOR_TEMP_REACHED = 0.5;   
 
 // DomoticZ meter IDX=33 - Overall energy consumption and forecast 
 var USAGE_HP             = 0;      // Current value of energy Wh actually used (overall meter)
@@ -173,7 +199,7 @@ setInterval(function(){ // compute overall Heater consumptions and update h/r ra
       });    
             
       // if( HeatingSelector === 0 ||  HeatingSelector === 10 ) { // compute and log -1 * r_ratio  
-             if( PreviousIndoorTemp-PreviousOutdoorTemp != 0) {  
+             if( Math.abs( PreviousIndoorTemp-PreviousOutdoorTemp ) > OUTDOOR_TEMP_REACHED ) {  
                   var Ir_Ratio = ( IndoorTemp - PreviousIndoorTemp ) / ( ( PreviousIndoorTemp-PreviousOutdoorTemp ) * ( PollingTimer / (24*60) ) ); 
                   if( (PreviousIndoorTemp-PreviousOutdoorTemp) < 0 ) Ir_Ratio *= -1;
                   if( VERBOSE ) console.log("Instantaneous Cooling Rate=", Ir_Ratio);
@@ -200,7 +226,7 @@ setInterval(function(){ // compute overall Heater consumptions and update h/r ra
                   }).on("error", function(e){
                         console.log("Error - Can't update DomoticZ Cooling Rate: " + e.message);
                   });
-             } // if( PreviousIndoorTemp-PreviousOutdoorTemp != 0) {  
+             } // if( Math.abs( PreviousIndoorTemp-PreviousOutdoorTemp ) > OUTDOOR_TEMP_REACHED ) {  
       // } // if( HeatingSelector === 0 ||  HeatingSelector === 10 ) { // compute and log 1/r ratio
 
   } // *** If not first run, log energy consumption/forecast and H/r ratios update *** 
