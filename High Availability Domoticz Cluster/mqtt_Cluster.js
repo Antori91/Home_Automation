@@ -1,6 +1,6 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 // ***** Domoticz High Availibilty Active/Passive Cluster - Script for the Passive/Backup server *****
-// V0.11 - July 2018 - Initial release
+// V0.12 - July 2018 - Initial release
           // NON Failure Condition :
           //        - Heartbeat OK is to success to get idxClusterFailureFlag Domoticz device using HTTP/JSON (every n minutes). Your backup server IP address must be in your main Domoticz setup : "Local Networks (no username/password)" 
           //        - Synchronize backup Domoticz database with the main one, Get ActiveMqtt/domoticz/in and ActiveMqtt/domoticz/out topics messages and published them to PassiveMqtt/domoticz/in topic
@@ -157,7 +157,7 @@ var MDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {
 var LDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {    
    var savedURL=JSON.stringify(JsonUrl);
    if( VERBOSE ) console.log("\n** Backup DomoticZ URL request=" + savedURL );
-   http_MDomoticz.get(JsonUrl, function(resp){
+   http_LDomoticz.get(JsonUrl, function(resp){
       var HttpAnswer = "";
       resp.on('data', function(ReturnData){ 
             HttpAnswer += ReturnData;
