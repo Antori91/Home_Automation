@@ -4,3 +4,4 @@
 //       - get alarm Alert state at CVQ6081 backpanel
 // V0.11 - August 2018 - Initial release
 
+== CODE AVAILABLE ON DEMAND ==
