@@ -15,7 +15,9 @@ idx_UnactivateHeaters      : 'XX',                              //[$$DOMOTICZ_PA
 Var_UnactiveHeaters        : 'X',                               //[$$DOMOTICZ_PARAMETER] - Dz user variable# to store the heaters heating state command
 Varname_UnactiveHeaters    : 'HeatersActive',                   //[$$DOMOTICZ_PARAMETER] - Dz user variable name to store the heaters heating state command
 ProtectedDevicePassword    : 'XXXX',                            //[$$DOMOTICZ_PARAMETER] - Dz password for protected device
-SecPanel_Seccode           : '--------------------------------' //[$$DOMOTICZ_PARAMETER] - Dz Security Panel Password MD5 Encrypted 
+SecPanel_Seccode           : '-------------------------------', //[$$DOMOTICZ_PARAMETER] - Dz Security Panel Password MD5 Encrypted
+idx_AlarmALERT             : 'X',                               //[$$DOMOTICZ_PARAMETER] - Alarm Alert status - Dz "ALERTE Intrusion Maison" Device 
+idx_AlarmARM               : 'XX'                               //[$$DOMOTICZ_PARAMETER] - Alarm Armed status - Dz "Maison sous Alarme" Device 
 };
 
 module.exports   = mySecretKeys;
