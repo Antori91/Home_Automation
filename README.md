@@ -1,7 +1,7 @@
 # Home Automation using Domoticz and ESP8266
 Domoticz High Availability Cluster : Synology Dz V3.5877 (Main) - Raspberry Dz V4.97 (Backup) - Scripts Node.js
 
-Alarm server : Raspberry iot_ALARM-SVR Node.js 
+Alarm server : Raspberry - motionEye - iot_ALARM-SVR Node.js 
 
 Sensors/Actuators : ESP8266 - Arduino
 
