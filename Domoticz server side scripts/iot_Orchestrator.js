@@ -110,7 +110,7 @@ function heater( MacAddress, IDX, Nominal, HeaterName, Zone1, Zone2 ) {
     this.RaiseFaultFlag = function() { this.DeviceFault = 1; } // 0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
     this.log = function(Vadc_Min, Vadc_Max) {
            this.DeviceFault = 0;  // Reset the error flag, we received a message from this heater 
-           var HeaterPower = parseInt( 230 * ( ( 4.3 * 0.707 * ( (Vadc_Max - Vadc_Min) / 2 ) / 1023  ) / 0.100 ) );
+           var HeaterPower = parseInt( 230 * ( ( 4.3 * 0.707 * ( (Vadc_Max - Vadc_Min) / 2 ) / 1024  ) / 0.100 ) );
            if( VERBOSE ) console.log("Heater Power ADC-ACS712 reading = " + HeaterPower + " Watts");
            if( HeaterPower >= this.Nominal/2 )  {
                 this.ON_PowerAverage = (this.ON_PowerAverage * this.NumberOf_ONRead++ + HeaterPower)/this.NumberOf_ONRead;
@@ -318,4 +318,5 @@ client.on('message', function (topic, message) {
      } //  if( message.indexOf("addlogmessage") != -1 ) { // Message coming from heater/ACS712 about its power consumption
      
 }) // client.on('message', functio
+
 
