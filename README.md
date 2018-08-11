@@ -3,7 +3,7 @@ Domoticz High Availability Cluster : Synology Dz V3.5877 (Main) - Raspberry Dz V
 
 Alarm server : Raspberry - motionEye - iot_ALARM-SVR Node.js 
 
-Sensors/Actuators : ESP8266 (Electrodragon and standalone ESP-12E) - Arduino
+Sensors/Actuators : ESP8266 (Electrodragon IoT ESP8266 Relay Board and standalone ESP-12E) - Arduino
 
 http://www.domoticz.com/forum/viewtopic.php?f=38&t=17032
 
