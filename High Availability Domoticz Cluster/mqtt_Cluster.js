@@ -194,7 +194,7 @@ var MDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {
          if( callBack ) callBack( null, JSON.parse(HttpAnswer), objectToCompute );
       });
    }).on("error", function(e){
-         if( dzFAILUREcount === TIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: dzJSONTalk, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
+         if( dzFAILUREcount === TIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: DOMOTICZ, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
          if( callBack ) callBack( e, null, objectToCompute );
    });
 };   // function MDomoticzJsonTalk( JsonUrl ) 
@@ -213,7 +213,7 @@ var LDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {
          if( callBack ) callBack( null, JSON.parse(HttpAnswer), objectToCompute );
       });
    }).on("error", function(e){
-         if( !LdzFAILURE || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: dzJSONTalk, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
+         if( !LdzFAILURE || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: DOMOTICZ, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
          if( callBack ) callBack( e, null, objectToCompute );
    });
 };   // function LDomoticzJsonTalk( JsonUrl ) 
