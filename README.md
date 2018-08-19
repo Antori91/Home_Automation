@@ -11,4 +11,6 @@ http://www.domoticz.com/forum/viewtopic.php?f=38&t=21608
 
 http://www.domoticz.com/forum/viewtopic.php?f=38&t=22436
 
+http://www.domoticz.com/forum/viewtopic.php?f=38&t=23914
+
 https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
