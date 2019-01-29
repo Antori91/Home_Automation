@@ -3,9 +3,9 @@
 # ***** Domoticz database backup and log management *****
 # V0.7 - January 2019 - motionEye incoming connections added
 # V0.6 - December 2018 - Domoticz automatic backup not used anymore. 
-MAIN_SERVER_IP="192.168.1.45"    # Main Domoticz server
-BACKUP_SERVER_IP="192.168.1.104" # Backup Domoticz server
-DZ_PORT="8084"                   # Domoticz IP port 
+MAIN_SERVER_IP="192.168.1.XX"    # Main Domoticz server
+BACKUP_SERVER_IP="192.168.1.XXX" # Backup Domoticz server
+DZ_PORT="XXXX"                   # Domoticz IP port 
 MAIN_DZ_BACKUPFILE="/volume1/Alarme/Dz_DBase_Backup/MainDzSvr.db"
 BACKUP_DZ_BACKUPFILE="/volume1/Alarme/Dz_DBase_Backup/BackupDzSvr.db"          
 curl -s "http://$MAIN_SERVER_IP:$DZ_PORT/json.htm?type=command&param=addlogmessage&message=Starting%20manual%20database%20backup%20procedure..."
