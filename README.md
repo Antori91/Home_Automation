@@ -2,7 +2,7 @@
 
 ## Main Features:
   - Smart electrical heating management using existing basic heaters
-  - Detailed energy monitoring
+  - Detailed energy monitoring. House thermal characteristics computation
   - Legacy wired alarm appliance go to Internet
   - Cameras and motion detection with motionEye. End to end communication between motionEye and Domoticz 
   - Ligthing management reusing existing latching relays and wall pushbuttons
