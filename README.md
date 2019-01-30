@@ -1,7 +1,7 @@
 # Home Automation using Domoticz, motionEye and ESP8266
 
 ## Main Features:
-  - Smart electrical heating management
+  - Smart electrical heating management using existing basic heaters
   - Detailed energy monitoring
   - Legacy wired alarm appliance go to Internet
   - Cameras and motion detection with motionEye. End to end communication between motionEye and Domoticz 
