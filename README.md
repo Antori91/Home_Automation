@@ -6,7 +6,7 @@
   - Legacy wired alarm appliance go to Internet
   - Cameras and motion detection with motionEye. End to end communication between motionEye and Domoticz 
   - Ligthing management reusing existing latching relays and wall pushbuttons
-  - Robust implementation with two Domoticz synchronized servers (fallback cluster) and alerting on sensors/actuators failure 
+  - Robust implementation with two Domoticz synchronized servers (failover cluster) and alerting on sensors/actuators failure 
 
 ## Architecture:
   - Domoticz High Availability Cluster : Synology Dz V3.5877 (Main) - Raspberry Dz V4.97 (Backup) - Node.js scripts
