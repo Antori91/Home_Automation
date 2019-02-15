@@ -2,8 +2,14 @@
 // ***** mtCluster:
 //        - High Availibilty Active/Passive Domoticz Cluster
 //        - Script for the Passive/Backup server *****
+// V0.20 - February 2019
+          // Change : Raise alert if backup server not fully operational ONLY after LTIMEOUT heartbeat failures (to avoid false alerts during server maintenance)
+          // Improvement : Before starting the Backup DZ Failover, try to restart the Main Domoticz instance using SSH 
+          // Improvement : After failure, when Main Domoticz instance is back, stop automatically the Backup DZ Failover (don't have anymore to stop/restart this script)
+          // Improvement : If Main Domoticz failure, don't log multiple "Status: DZ FAILOVER HAS BEEN STARTED USING BACKUP SERVER" messages
+          // Improvement : SECPANEL synchronization supported
 // v0.16 - August 2018
-          // NEW FEATURE : Raise alert if backup server not fully operationnal
+          // NEW FEATURE : Raise alert if backup server not fully operational
           // Reset Heartbeat Timeout Countdown if Domoticz answer
 // V0.12  - July 2018 - Initial release
           // NON Failure Condition :
@@ -26,10 +32,17 @@
           // Restarting the service of the main server after a failover
           //        - Restart first this script (and eventually copy the backup Domoticz database to the main server)
 
-const VERBOSE        = false; // Detailed logging or not
-const MyJSecretKeys  = require('/home/pi/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');
-const child          = require('child_process');
-const execSync       = child.execSync; 
+const VERBOSE          = false; // Detailed logging or not
+const MyJSecretKeys    = require('/home/pi/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');
+var SSHclient          = require('ssh2').Client;
+
+// SECpanel Status 
+const MSECPANEL_DISARM           = 0;    // using MQTT
+const MSECPANEL_ARM_HOME         = 11;
+const MSECPANEL_ARM_AWAY         = 9;
+const JSECPANEL_DISARM           = 0;    // using JSON
+const JSECPANEL_ARM_HOME         = 1;
+const JSECPANEL_ARM_AWAY         = 2;
 
 // MQTT Cluster Parameters       
 const MQTT_ACTIVE_SVR    = 'mqtt://' + MyJSecretKeys.MAIN_SERVER_IP;   
@@ -42,25 +55,32 @@ var   mdzStatus          = true;    // Main Domoticz server status to log
 var   dzStatus           = true;    // Backup Domoticz server status to log 
 var   mqttTROUBLE        = false;   // A MQTT error occured. Main MQTT server failure has to be confirmed
 var   mqttFAILURE        = false;   // Main MQTT server failure confirmed
+var   LmqttTROUBLE       = false;   // A MQTT error occured. Backup MQTT server failure has to be confirmed
+var   LmqttFAILURE       = false;   // Backup MQTT server failure confirmed
 const TIMEOUT            = 15;      // Max number of Main server issues (Dz or Mqtt) in a row before we raise Failure signal
+const LTIMEOUT           = 2;       // Max number of Backup server issues (Dz or Mqtt) in a row before we raise Failure signal
 const HeartbeatTimer     = 1;       // Check Domoticz and MQTT health on both servers every n minutes
 var   dzFAILUREcount     = TIMEOUT; // If Main Domoticz failed n times in a row (i.e failure during TIMEOUT * HeartbeatTimer minutes), then trigger Domoticz failover
+var   LdzFAILUREcount    = LTIMEOUT;// If Backup Domoticz failed n times in a row (i.e failure during LTIMEOUT * HeartbeatTimer minutes), then alert about cluster not operational
 var   mqttFAILUREcount   = TIMEOUT; // If Main Mqtt reconnection didn't happen during this time in minutes (TIMEOUT * HeartbeatTimer), then trigger MQTT failover
-var   commandLine;
-execSync(commandLine, (err, stdout, stderr) => {
-  if (err) {
-    // node couldn't execute the command
-    console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: ipCONFIG, Status: FAILED to change WLAN0 IP address");
-    return;
-  }
-  if( VERBOSE ) console.log(`stdout: ${stdout}`);
-  if( VERBOSE ) console.log(`stderr: ${stderr}`);
-});  
-var newIP = function( newIPaddress) {
-  commandLine = 'sudo ifconfig wlan0 ' + newIPaddress;
-  execSync( commandLine );
-  console.log("\n{" + new Date() + " mtCluster-Info] Server: BACKUP, Service: ipCONFIG, Status: WLAN0 IP address CHANGED to " + newIPaddress );
-}     
+var   LmqttFAILUREcount  = LTIMEOUT;// If Backup Mqtt reconnection didn't happen during this time in minutes (LTIMEOUT * HeartbeatTimer), then trigger MQTT failover
+var   DZ_STOP            = 'sudo /var/packages/domoticz/scripts/start-stop-status stop\n';   // Synology Platform: scripts to stop/start Domoticz
+var   DZ_START           = 'sudo /var/packages/domoticz/scripts/start-stop-status start\n';
+if( MyJSecretKeys.MAIN_SERVER_HARDWARE === 'RASPBERRY' ) {
+      DZ_STOP            = 'sudo /etc/init.d/domoticz.sh stop\n';   // Raspberry Platform: scripts to stop/start Domoticz
+      DZ_START           = 'sudo /etc/init.d/domoticz.sh start\n';
+}
+const DZ_COMPLETION      = 25000; // Duration in ms to wait for Domoticz shutdown or restart command completion. MUST BE SET LESS THAN HeartbeatTimer/2 
+var DZ_RECOVER_SUCCESS   = -1; // -1 = Unknwon, 0 = KO, 1 = OK
+
+function newIP( newIPaddress ) {
+  const { spawn } = require('child_process');
+  const ifconfig  = spawn('sudo', ['ifconfig', 'wlan0', newIPaddress]);  
+  console.log("\n{" + new Date() + " mtCluster-Info] Server: BACKUP, Service: IFCONFIG - WLAN0 IP address CHANGED to " + newIPaddress + ", Status : {");
+  ifconfig.stdout.on('data', (data) => { console.log(`stdout: ${data}`); });
+  ifconfig.stderr.on('data', (data) => { console.log(`stderr: ${data}`); });
+  ifconfig.on('close', (code)       => { console.log(`child process exited with code ${code}`); console.log("}"); });
+}  // function newIP( newIPaddress ) {   
 
 function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Domoticz Idx  
     // IDX = Domoticz IDX
@@ -82,16 +102,25 @@ function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Do
           if( this.DeviceType === "Thermostat" ||  this.DeviceType === "Temperature" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + "\"}";               
           PassiveSvr.publish('domoticz/in', OUTsyncmsg );  
           if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming message sent to Backup domoticz/in server: " + OUTsyncmsg);
+          if( this.DeviceType === "Secpanel" ) {
+              if( JSONmessage.nvalue === MSECPANEL_ARM_HOME ) L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_HOME + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
+              if( JSONmessage.nvalue === MSECPANEL_ARM_AWAY ) L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_AWAY + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
+              if( JSONmessage.nvalue === MSECPANEL_DISARM )   L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_DISARM   + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
+              L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
+              LDomoticzJsonTalk( L_JSON_API, LdzStatus );   
+              if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming SecPanel message sent to Backup domoticz/JSON server: " + OUTsyncmsg);
+          } // if( this.DeviceType === "Secpanel" ) {
        } // if( this.DataSource = "mqtt/out" ) {  
     }  // this.DataProcess = function( syncmsg )
 }   // function synchronize( IDX, DataSource, DataStore ) {
 
 // Here all Domoticz Idx to synchronize [$$SYNC_REPOSITORY]
 var   myIDXtoSync      = [ new IDXtoSync( 50, "mqtt/out", "Light/Switch" ),  new IDXtoSync( 51, "mqtt/out", "Light/Switch" ),  // 50/51=Entree and Mezzanine lighting 
-                           new IDXtoSync( MyJSecretKeys.idx_AlarmALERT, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_AlarmARM, "mqtt/in", "" ),  // Alarm Armed and Alarm Alert flags
+                           new IDXtoSync( MyJSecretKeys.idx_SecPanel, "mqtt/in", "" ), new IDXtoSync( MyJSecretKeys.idx_AlarmALERT, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_AlarmARM, "mqtt/in", "" ),  // Secpanel, Alarm Armed and Alarm Alert flags
                            new IDXtoSync( 34, "mqtt/in", ""),   // 34=Hot Water Tank
                            new IDXtoSync( 27, "mqtt/in", "" ),  new IDXtoSync( 28, "mqtt/in", "" ),   new IDXtoSync( 29, "mqtt/in", ""), new IDXtoSync( 30, "mqtt/in", "" ),   new IDXtoSync( 31, "mqtt/in", ""),   // Ground Floor Heaters
                            new IDXtoSync( 35, "mqtt/in", "" ),  new IDXtoSync( 36, "mqtt/in", "" ),   new IDXtoSync( 37, "mqtt/in", ""), new IDXtoSync( 38, "mqtt/in", "" ),   // First Floor Heaters   
+                           new IDXtoSync( MyJSecretKeys.idx_SecPanel, "mqtt/out", "Secpanel" ), // Secpanel 
                            new IDXtoSync( 17, "mqtt/out", "SelectorSwitch" ), new IDXtoSync( 16, "mqtt/out", "Thermostat" ) ];   //  17=Main heating breaker (OFF/HORSGEL/ECO/CONFORT), 16=Heating thermostat setpoint
                            // heating display/schedule to add to the repository in the future
 // [$$SYNC_REPOSITORY]
@@ -110,8 +139,10 @@ port: MyJSecretKeys.DZ_PORT,
 path: '/'
 };
 
+// *************** HEARTBEAT ROUTINES ***************
+
 setInterval(function(){ // Main Domoticz Heartbeat
-   if( dzFAILURE ) return;
+   // if( dzFAILURE ) return;
    if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: DOMOTICZ, DzHEARTBEAT TimeToken: " + dzFAILUREcount ); 
    M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
    M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
@@ -119,7 +150,8 @@ setInterval(function(){ // Main Domoticz Heartbeat
 }, HeartbeatTimer*60000); // 
 
 setInterval(function(){ // Backup Domoticz Heartbeat
-   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, DzHEARTBEAT" ); 
+   // if( LdzFAILURE ) return;
+   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, DzHEARTBEAT TimeToken: " + LdzFAILUREcount ); 
    L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
    L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
    LDomoticzJsonTalk( L_JSON_API, LdzStatus );   
@@ -127,34 +159,88 @@ setInterval(function(){ // Backup Domoticz Heartbeat
 
 var dzFailover   = function( error, data ) { // dzFailover
    if( !error ) {
-      if( mdzStatus || dzFAILUREcount < TIMEOUT ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: DOMOTICZ, Status: ON LINE");
+      DZ_RECOVER_SUCCESS = -1; 
+      if( dzFAILURE ) { 
+         dzFAILURE = false;
+         DZ_RECOVER_SUCCESS = 1;
+         console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: DOMOTICZ, Status: ON LINE - MANUAL RESTART - DZ FAILOVER HAS BEEN STOPPED");
+      }
+      else if( mdzStatus || ( dzFAILUREcount > 0 &&  dzFAILUREcount < TIMEOUT ) ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: DOMOTICZ, Status: ON LINE");
+           else if( dzFAILUREcount === 0 ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: DOMOTICZ, Status: ON LINE - AUTOMATIC RESTART HAPPENED");
       mdzStatus = false;
-      dzFAILUREcount = TIMEOUT      
+      dzFAILUREcount = TIMEOUT;            
       return;
-   }
-   if( --dzFAILUREcount <= 0 ) {   
-      dzFAILURE = true;
-      L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag; // Signal the failure using Domoticz at the backup server
-      L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
-      LDomoticzJsonTalk( L_JSON_API, RaisefailureFlag ); 
-      if( !mqttFAILURE) console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: MAIN, Service: FAILOVER, Status: DZ FAILOVER HAS BEEN STARTED USING BACKUP SERVER"); 
-   }
+   } // if( !error ) {  
+   if( --dzFAILUREcount === 0 ) {        
+          // First, try to restart Domoticz in the main server
+          console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: DOMOTICZ, Status: OFF LINE - TRYING TO RESTART");
+          var SSHconn = new SSHclient();
+          SSHconn.on('ready', function() {
+             console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: SSH, Status: Connected");
+             SSHconn.shell(function(err, stream) {
+                if (err) { console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: MAIN, Service: SSH, Status: Shell Failed"); return; }
+                stream.on('close', function() {
+                   console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: SSH, Status: SSH Session normally Ended");
+                   SSHconn.end();
+                }).on('data', function(data) {
+                   if( VERBOSE ) console.log('STDOUT: ' + data);
+                });
+                console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: SHELL, Status: Stopping Domoticz");
+                stream.write(DZ_STOP);
+                setTimeout(function(){
+                    stream.write( MyJSecretKeys.MAIN_SERVER_ROOT_PWD + '\n');
+                    setTimeout(function(){ 
+                       console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: SHELL, Status: Restarting Domoticz");
+                       stream.write(DZ_START);
+                       setTimeout(function(){
+                          // stream.write( MyJSecretKeys.MAIN_SERVER_ROOT_PWD + '\n');
+                          setTimeout(function(){ 
+                             stream.end('exit\n');
+                          }, DZ_COMPLETION); 
+                       }, 1500);
+                    }, DZ_COMPLETION); 
+                }, 1500);  
+             });  // SSHconn.shell
+          }).connect({
+            host     : MyJSecretKeys.MAIN_SERVER_IP,
+            port     : MyJSecretKeys.MAIN_SERVER_SSH_PORT,
+            username : MyJSecretKeys.MAIN_SERVER_SSH_USER,
+            password : MyJSecretKeys.MAIN_SERVER_ROOT_PWD  
+          });  // SSHconn( 'ready' )
+          SSHconn.on(  'error', function ()  { 
+             console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: MAIN, Service: SSH, Status: Failed to connect");            
+          }) // SSHconn.on( 'error' )
+   }  //  if( --dzFAILUREcount === 0 ) {        
+   if( dzFAILUREcount < 0 ) { 
+          if( DZ_RECOVER_SUCCESS === 0 ) return;
+          DZ_RECOVER_SUCCESS = 0;
+          dzFAILURE = true;
+          L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag; // Signal the failure using Domoticz at the backup server
+          L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
+          LDomoticzJsonTalk( L_JSON_API, RaisefailureFlag ); 
+          if( !mqttFAILURE) console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: MAIN, Service: FAILOVER, Status: DZ FAILOVER HAS BEEN STARTED USING BACKUP SERVER");             
+   }  // if( dzFAILUREcount < 0 ) { 
 };
 
 var LdzStatus = function( error, data ) { // LdzStatus
    if( !error ) {
-      LdzFAILURE = false;
-      if( dzStatus || VERBOSE ) {
-         dzStatus = false;
-         console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, Status: ON LINE");
-      } // if( LdzStatus )
-   } else {  
+      if( LdzFAILURE ) { 
+         LdzFAILURE = false;
+         console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, Status: ON LINE - DZ HAS BEEN RECOVERED");
+      }
+      else if( dzStatus || LdzFAILUREcount < LTIMEOUT ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, Status: ON LINE");   
+      dzStatus = false;
+      LdzFAILUREcount = LTIMEOUT;    
+      return;
+   } // if( !error ) {   
+   if( --LdzFAILUREcount === 0 ) {  
       LdzFAILURE = true; 
       dzStatus = true;
       M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag; // Signal the failure using Domoticz at the main server
       M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
       MDomoticzJsonTalk( M_JSON_API, MRaisefailureFlag );     
-   } // if( !error )
+      console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: DOMOTICZ, Status: DOWN"); 
+   } // if( --ldzFAILUREcount === 0
 };
 
 setInterval(function( ) { // Main server Mqtt Heartbeat and failover 
@@ -163,9 +249,15 @@ setInterval(function( ) { // Main server Mqtt Heartbeat and failover
    if( mqttTROUBLE ) 
       if( --mqttFAILUREcount <= 0 ) {   
           mqttFAILURE = true;
-          L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag; // Signal the failure using Domoticz at the backup server
-          L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
-          LDomoticzJsonTalk( L_JSON_API, RaisefailureFlag ); 
+          if( !LdzFAILURE ) { 
+             L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
+             L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
+             LDomoticzJsonTalk( L_JSON_API, RaisefailureFlag );
+          } else {
+             M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
+             M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
+             MDomoticzJsonTalk( M_JSON_API, MRaisefailureFlag );
+          }  // if( !LdzFAILURE ) { 
           // Kill Main Domoticz server - NOT IMPLEMENTED YET : we assume MQTT went down because the main server went down 
           // M_JSON_API.path = '/json.htm?type=command&param=system_shutdown';
           // M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
@@ -177,8 +269,29 @@ setInterval(function( ) { // Main server Mqtt Heartbeat and failover
              newIP( MyJSecretKeys.MAIN_SERVER_IP );
              console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: MAIN, Service: FAILOVER, Status: DZ AND MQTT FAILOVER HAS BEEN STARTED USING BACKUP SERVER");
           }, 5000 );
-      } // if( mqttFAILUREcount-- < 0 ) {   
+      } // if( --mqttFAILUREcount <= 0 ) {
 }, HeartbeatTimer*60000); //
+
+setInterval(function( ) { // Backup server Mqtt Heartbeat
+   if( LmqttFAILURE ) return;  
+   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: MQTT, MqttHEARTBEAT TimeToken: " + LmqttFAILUREcount ); 
+   if( LmqttTROUBLE ) 
+      if( --LmqttFAILUREcount <= 0 ) {   
+          LmqttFAILURE = true;
+          console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: MQTT, Status: DOWN" ); 
+          if( !LdzFAILURE ) { 
+             L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
+             L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
+             LDomoticzJsonTalk( L_JSON_API, RaisefailureFlag );
+          } else {
+             M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
+             M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
+             MDomoticzJsonTalk( M_JSON_API, MRaisefailureFlag );
+          }  // if( !LdzFAILURE ) { 
+      } // if( --LmqttFAILUREcount <= 0 ) { 
+}, HeartbeatTimer*60000); //
+
+// *************** SUBROUTINES TO TALK TO DOMOTICZ  ***************
 
 // Function to talk to MAIN DomoticZ. Do Callback if any 
 var MDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {    
@@ -213,7 +326,7 @@ var LDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {
          if( callBack ) callBack( null, JSON.parse(HttpAnswer), objectToCompute );
       });
    }).on("error", function(e){
-         if( !LdzFAILURE || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: DOMOTICZ, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
+         if( LdzFAILUREcount === LTIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: DOMOTICZ, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
          if( callBack ) callBack( e, null, objectToCompute );
    });
 };   // function LDomoticzJsonTalk( JsonUrl ) 
@@ -237,8 +350,9 @@ var MRaisefailureFlag = function( error, data ) { // Raise failure flag using Ma
 }; // var MRaisefailureFlag = fu
 
 // *************** MAIN START HERE ***************
-console.log("\n*** " + new Date() + " - mtCluster: High Availability Domoticz Cluster starting ***");
-console.log("mtCluster MQTT nodes address = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
+console.log("\n*** " + new Date() + " - mtCluster V0.20 High Availability Domoticz Cluster starting ***");
+console.log("mtCluster MQTT servers hardware  = " +  MyJSecretKeys.MAIN_SERVER_HARDWARE + " - " + MyJSecretKeys.BACKUP_SERVER_HARDWARE);
+console.log("mtCluster MQTT nodes address     = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
 console.log("mtCluster Domoticz nodes address = " +  M_JSON_API.host + ":" + M_JSON_API.port + " - " + L_JSON_API.host + ":" + L_JSON_API.port);
 
 // Reset backup server IP address to default one
@@ -253,36 +367,28 @@ ActiveSvr.on(  'error', function ()  {
    console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: MQTT, Status: CAN'T CONNECT to MQTT at boot");
    mqttTROUBLE = true; })     // Emitted when the client cannot connect (i.e. connack rc != 0) 
 PassiveSvr.on( 'error', function ()  {
-   console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: MQTT, Status: CAN'T CONNECT to MQTT at boot"); 
-   M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
-   M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
-   MDomoticzJsonTalk( M_JSON_API, MRaisefailureFlag ); })
+   console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: MQTT, Status: CAN'T CONNECT to MQTT at boot"); 
+   LmqttTROUBLE = true; })
 
 ActiveSvr.on(  'close', function ()  { 
    if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: MQTT, Status: DOWN");
    mqttTROUBLE = true; })     // Emitted after a disconnection  
 PassiveSvr.on( 'close', function ()  { 
-   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: MQTT, Status: DOWN"); })
+   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: MQTT, Status: DOWN");
+   LmqttTROUBLE = true; })
 ActiveSvr.on(  'offline', function ()  { 
-   console.log("\n[" + new Date() + " mtCluster-ALERT] Server: Main, Service: MQTT, Status: OFF LINE")
+   console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: MQTT, Status: OFF LINE")
    mqttTROUBLE = true; })   // Emitted when the client goes offline 
 PassiveSvr.on( 'offline', function ()  {  
-   console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: Backup, Service: MQTT, Status: OFF LINE");
-   if( !LdzFAILURE ) { 
-       L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
-       L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
-       LDomoticzJsonTalk( L_JSON_API, RaisefailureFlag );
-   } else {
-       M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
-       M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
-       MDomoticzJsonTalk( M_JSON_API, MRaisefailureFlag );
-   } })
+   console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: MQTT, Status: OFF LINE");
+   LmqttTROUBLE = true; })
 
 ActiveSvr.on(  'reconnect', function ()  { 
    if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: MQTT, Status: Trying to reconnect");
    mqttTROUBLE = true; }) // Emitted when a reconnect starts
 PassiveSvr.on( 'reconnect', function ()  { 
-   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: MQTT, Status: Trying to reconnect"); })
+   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: MQTT, Status: Trying to reconnect"); 
+   LmqttTROUBLE = true; })
 
 // MQTT Subscribe to topics on Connect event
 ActiveSvr.on(  'connect', function ()  { 
@@ -293,6 +399,7 @@ ActiveSvr.on(  'connect', function ()  {
    } })  
 PassiveSvr.on( 'connect', function ()  { 
    console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: MQTT, Status: ON LINE");
+   LmqttTROUBLE = false; LmqttFAILUREcount = LTIMEOUT;
    PassiveSvr.subscribe( ['domoticz/out']  ); })  
 
 // MQTT Messages received events
