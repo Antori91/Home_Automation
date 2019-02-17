@@ -11,7 +11,7 @@
 ## Architecture:
   - Domoticz High Availability Cluster : Synology Dz V3.5877 (Main) - Raspberry Dz V4.97 (Backup) - Node.js scripts
   - Alarm server : Raspberry - motionEye - iot_ALARM-SVR Node.js script
-  - Temp Sensors and Lighting/Heaters Actuators : ESP8266 (Electrodragon IoT ESP8266 Relay Board and standalone ESP-12E) - Arduino sketches
+  - Temp Sensors and Lighting/Heaters Actuators : ESP8266 (Standalone ESP-12E and Electrodragon IoT ESP8266 Relay Board) - Arduino sketches
   - Communication protocol : MQTT
 
 ## Forum topics about:
