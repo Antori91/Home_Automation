@@ -3,6 +3,8 @@
 //        - Manage Heaters and Heating Zones (Scheduled TOP Start/Stop),
 //        - Compute and log heaters characteristics,
 //        - Monitor ESP8266-ACS712/Heaters, ESP8266/Lighting and Raspberry/Alarm servers *****
+// V0.91 - February 2019
+           // Improvement : Use command-line argument to define execution hardware (i.e. avoid a slightly different version per platform)
 // V0.9 - August 2018
            // Monitor the new Node.js Alarm server. If failure, raise "Panne Alarme" - idxAlarmFailureFlag Dz device
 // V0.8 - March 2018
@@ -28,9 +30,10 @@
            // Initial release - Monitor CAMPA heaters to know their actual nominal power (2000W or not)
            // 1500 W Nominal Power ==> {"command" : "addlogmessage", "message" : "idx : 30, Vadc_Min/Max=375/814"} - 2000 W Nominal Power ==> {"command" : "addlogmessage", "message" : "idx : 30, Vadc_Min/Max=302/887"}
 
-const VERBOSE = false; // Detailed logging or not   
-const MyJSecretKeys  = require('/volume1/@appstore/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');
-// const MyJSecretKeys  = require('/home/pi/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');
+const VERBOSE = false; // Detailed logging or not 
+if( process.argv[ 2 ] === 'RASPBERRY')                                                         // Unless otherwise specified 
+      MyJSecretKeys  = require('/home/pi/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');            
+else  MyJSecretKeys  = require('/volume1/@appstore/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');  // execution hardware assumed to be Synology  
 
 // ** Monitoring attributes **
 const HEATER_OFFLINE   = "Heater went Offline";
@@ -129,11 +132,12 @@ function heater( MacAddress, IDX, Nominal, HeaterName, Zone1, Zone2 ) {
 }   // function heater( IDX
 var   myHeaters        = [ new heater("3A73F0", 28, 1426, "ENTREE", "10", "40" ),     new heater("3B2071", 29, 1384, "CUISINE", "10", "40"),     new heater("3B1D5F", 27, 1426, "SALLE A MANGER", "20", "40"),
                            new heater("FA9ECE", 30, 1261, "SALON SUD", "30", "40"),   new heater("3B1A D", 31, 1261, "SALON NORD", "30", "40"),
-                           new heater("94D6A3", 35, 1239, "CH4", "50", "100"),        new heater("94CD66", 36, 909,  "CH3", "60", "100" ),       new heater("94CDC2", 37, 1422, "CH2", "70", "100"), 
+                           new heater("94D6A3", 35, 1239, "CH4", "50", "100"),      new heater("94CD66", 36, 909,  "CH3", "60", "100" ),   new heater("94CDC2", 37, 1422, "CH2", "70", "100"), 
                            new heater("9497B1", -1, 500,  "SDB", "80", "100"),        new heater("65DEF6", 38, 1442, "PARENTAL", "90", "100"),   new heater("412A10", 34, 1603, "ECS", "-1", "-1") ];
                            
 // *************** MAIN START HERE ***************
-console.log("*** " + new Date() + " - Domoticz iot_Orchestrator starting ***\n");
+if( process.argv[ 2 ] === 'RASPBERRY') console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v0.91 starting - Server platform set to RASPBERRY ***\n");
+else console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v0.91 starting - Server platform set to SYNOLOGY ***\n");
 
 // Get from Dz the latest heating command saved and display it 
 JSON_API.path = '/json.htm?type=command&param=getuservariable&idx=' + Var_UnactiveHeaters;
@@ -318,5 +322,4 @@ client.on('message', function (topic, message) {
      } //  if( message.indexOf("addlogmessage") != -1 ) { // Message coming from heater/ACS712 about its power consumption
      
 }) // client.on('message', functio
-
 
