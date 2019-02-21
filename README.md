@@ -40,16 +40,16 @@
      - Devices: 
          - "Security Panel"
          - Two "Light/Switch Switch" for Alarm status (Motion Sensor subtype) and Home Intrusion (On/Off subtype). Define On/Off actions and Notification to send email/sms (arm/disarm confirmation messages and intrusion alert message) 
-         - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each Light/Switch Switch, define On/Off actions to activate/disactivate motionEye motion detection. For "Light/Switch Selector Switch", define the levels according to my PTZ Camera setpoint commands.
-         - "Temp + Humidity" for each temp sensor and one for Degrees-Days
+         - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each Light/Switch Switch camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the levels according to the PTZ Camera setpoint commands.
+         - "Temp + Humidity" for each Temperature sensor and one for Degrees.Days
          - one "Light/Switch Switch" for Electricity tariff
          - "P1 Smart Meter" for each heater and one for overall heating index meter 
          - One "Light/Switch Selector switches" for Heating main breaker. Define the levels, usually OFF/HORSGEL/ECO/CONFORT 
          - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to my heating zones
-         - one "General	Text" display for heating zones status
+         - one "General	Text" to display the heating zones status
          - one "Thermostat SetPoint"
          - "Light/Switch Switch" for each lighting zone
-         - Three "Light/Switch Switch/Smoke Detector" for Failure status regarding Temp sensors, Lighting server and alarm server. Define On action and Notification to send email/sms if failure 
+         - Three "Light/Switch Switch/Smoke Detector" for Failure status regarding Temperature sensors, Lighting server and alarm server. Define On action and Notification to send email/sms if failure 
      - User variables: 
          - Idx=1, "String" and named "HeatersActive" for Heaters status. Initial value: {"command" : "activateheaters", "28" : "On", "29" : "On", .... , "34" : "On"} where 28, 29 .... 34 are Heater IDX number
          - "Integer" and named "TWILIGHTimer0" for Lighting timer. Initial value: 0  
