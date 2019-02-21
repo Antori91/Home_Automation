@@ -44,21 +44,21 @@
          - "Temp + Humidity" for each Temperature sensor and one for Degrees.Days
          - one "Light/Switch Switch" for Electricity tariff
          - "P1 Smart Meter" for each heater and one for overall heating index meter 
-         - One "Light/Switch Selector switches" for Heating main breaker. Define the levels OFF/HORSGEL/ECO/CONFORT 
+         - One "Light/Switch Selector switch" for Heating main breaker. Define the levels OFF/HORSGEL/ECO/CONFORT 
          - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to the heating zones
          - one "General	Text" to display the heating zones status
          - one "Thermostat SetPoint"
          - "Light/Switch Switch" for each lighting zone
          - Three "Light/Switch Switch/Smoke Detector" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notification to send email/sms if failure 
      - User variables: 
-         - Idx=1, "String" and named "HeatersActive" for Heaters status. Initial value: {"command" : "activateheaters", "28" : "On", "29" : "On", .... , "34" : "On"} where 28, 29 .... 34 are Heater IDX number
-         - "Integer" and named "TWILIGHTimer0" for Lighting timer. Initial value: 0  
-         - "Integer" and named "MezzaOverHeated" for one of heating cost optimizer rule. Initial value: 0 
+         - Idx=1, "String" and name "HeatersActive" for Heaters status. Initial value: {"command" : "activateheaters", "28" : "On", "29" : "On", .... , "34" : "On"} where 28, 29 .... 34 are Heater IDX number
+         - "Integer" and name "TWILIGHTimer0" for Lighting timer. Initial value: 0  
+         - "Integer" and name "MezzaOverHeated" for one of heating cost optimizer rule. Initial value: 0 
      - Blockly: enter the blockly according the GIF images given
      - Scripts: 
          - copy to installation directory the nodejs and shell scripts. By default, this installation directory is "/volume1/@appstore/iot_domoticz" (Synology) and "/home/pi/iot_domoticz" (Raspberry)
          - update the WiFi_DZ_MQTT_SecretKeys.js file according to the environment
-         - update myHeaters repository at line 133 of iot_Orchestrator.js file according to heating zones and heaters per heating zone used 
+         - update myHeaters repository at line 133 of iot_Orchestrator.js file according to heating zones and heaters per heating zone used. Update also eventually lines 215 and 226 regarding Heating Schedule/Start and Heating Schedule/Stop actual names choosen
          - setup Crontab to launch the shell scripts at boot
      - Security setup: Local Networks (no username/password) set to accept connections without authentication from the Backup server and from "localhost;127.0.0.*"      
   - Backup the Domoticz database in the main server
@@ -79,5 +79,7 @@
          - update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
      - Compile the sketches and flash the ESP8266 
      - Install the ESP8266 and connect them to the devices (heaters, hot water tank, lighting relays)
-  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedule to send every hour a command to start all heating zones. There is no synchronization between the heating schedules of the main and backup servers.
+  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedules to send every hour a command to start all heating zones. In my environment, there is no synchronization between the heating schedules of the main and backup servers. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start and Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone  
+           
+
            
