@@ -27,7 +27,7 @@
 
   - https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
 
-## How I've built the corresponding environnement:
+## How I've built the corresponding environment:
   - Setup three servers. Synology: main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated alarm server. Mandatory software:
      - MQTT for the two Domoticz servers,
      - Node.js for all three (version greater than 6) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
