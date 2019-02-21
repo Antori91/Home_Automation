@@ -31,12 +31,7 @@
   - Setup three servers. Synology: main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Mandatory software:
      - MQTT for the two Domoticz servers,
      - Node.js for all three (version greater than 6 for the two Raspberry) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
-  - Install motionEye in the dedicated Alarm server. Update the /etc/motioneye/motion.conf file to have the following lines at the end of the file:
-         - webcontrol_html_output on
-         - webcontrol_port XXXX where XXXX is the port number choosen, 7999 by default
-         - setup_mode off
-         - webcontrol_parms 2
-         - webcontrol_localhost off
+  - Install motionEye in the dedicated Alarm server. Update the /etc/motioneye/motion.conf file to have the following lines at the end of the file: webcontrol_html_output on, webcontrol_port XXXX where XXXX is the port number choosen (7999 by default), setup_mode off, webcontrol_parms 2 and webcontrol_localhost off
   - Install Domoticz in the main server:
      - Hardware: 
          - "Dummy (Does nothing, use for virtual switches only)"
@@ -78,7 +73,7 @@
      - Setup Crontab to run it at boot
   - Install the Alarm scripts (nodejs and shell) in the dedicated Alarm server
   - Setup all the ESP8266:
-     - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json) 
+     - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json):
          - Update WiFi_OTA_MQTT_SecretKeys.h according to the environment
          - Update pubsub.h
          - Update heaters repository from lines 130 to 166 of iot_ESP8266_AC712.ino file
