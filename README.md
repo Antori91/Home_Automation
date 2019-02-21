@@ -16,6 +16,8 @@
 
 ## Forum topics about:
   - http://www.domoticz.com/forum/viewtopic.php?f=38&t=17032
+  
+  - https://www.domoticz.com/forum/viewtopic.php?f=38&t=24088
 
   - http://www.domoticz.com/forum/viewtopic.php?f=38&t=21608
 
