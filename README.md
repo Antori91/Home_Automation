@@ -26,3 +26,58 @@
   - http://www.domoticz.com/forum/viewtopic.php?f=38&t=23914
 
   - https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
+
+## How I've built the corresponding environnement:
+  - Setup three servers. Synology: main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated alarm server. Mandatory software:
+     - MQTT for the two Domoticz servers,
+     - Node.js for all three (version greater than 6) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
+  - Install motionEye in the dedicated alarm server
+  - Install Domoticz in the main server:
+     - Hardware: 
+         - "Dummy"
+         - "MQTT Client Gateway with LAN interface" hardware with Remote address=localhost, port=1883 and Publish Topic=out
+     - Camera: add all my cameras
+     - Devices: 
+         - "Security Panel"
+         - Two "Light/Switch Switch" for Alarm status (Motion Sensor subtype) and Home Intrusion (On/Off subtype). Define On/Off actions and Notification to send email/sms (arm/disarm confirmation messages and intrusion alert message) 
+         - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each Light/Switch Switch, define On/Off actions to activate/disactivate motionEye motion detection. For "Light/Switch Selector Switch", define the levels according to my PTZ Camera setpoint commands.
+         - "Temp + Humidity" for each temp sensor and one for Degrees-Days
+         - one "Light/Switch Switch" for Electricity tariff
+         - "P1 Smart Meter" for each heater and one for overall heating index meter 
+         - One "Light/Switch Selector switches" for Heating main breaker. Define the levels, usually OFF/HORSGEL/ECO/CONFORT 
+         - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to my heating zones
+         - one "General	Text" display for heating zones status
+         - one "Thermostat SetPoint"
+         - "Light/Switch Switch" for each lighting zone
+         - Three "Light/Switch Switch/Smoke Detector" for Failure status regarding Temp sensors, Lighting server and alarm server. Define On action and Notification to send email/sms if failure 
+     - User variables: 
+         - Idx=1, "String" and named "HeatersActive" for Heaters status. Initial value: {"command" : "activateheaters", "28" : "On", "29" : "On", .... , "34" : "On"} where 28, 29 .... 34 are Heater IDX number
+         - "Integer" and named "TWILIGHTimer0" for Lighting timer. Initial value: 0  
+         - "Integer" and named "MezzaOverHeated" for one of heating cost optimizer rule. Initial value: 0 
+     - Blockly: enter the blockly according the GIF images given
+     - Scripts: 
+         - copy to installation directory the nodejs and shell scripts. By default, this installation directory is "/volume1/@appstore/iot_domoticz" (Synology) and "/home/pi/iot_domoticz" (Raspberry)
+         - update the WiFi_DZ_MQTT_SecretKeys.js file according to my environment
+         - update myHeaters repository at line 133 of iot_Orchestrator.js file according to heating zones and heaters per heating zone used 
+         - setup Crontab to launch the shell scripts at boot
+     - Security setup: Local Networks (no username/password) set to accept connections without authentication from the Backup server and from "localhost;127.0.0.*"      
+  - Backup the Domoticz database in the main server
+  - Install Domoticz in the backup server:
+     - Devices: use the main Domoticz database to setup again the devices
+     - Blockly: enter again the blockly
+     - Scripts: copy again all the (modified) scripts and setup again Crontab
+  -  Install the Cluster feature :
+     - Copy the cluster scripts (nodejs and shell) in the backup server
+     - update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
+     - Setup Crontab to run it at boot
+  - Setup ESP8266
+     - Using Arduino IDE:  
+         - update WiFi_OTA_MQTT_SecretKeys.h according to my environment
+         - update pubsub.h
+         - update heaters repository from lines 130 to 166 of iot_ESP8266_AC712.ino file
+         - update lighting repository and various parameters from lines 36 to 74 of iot_ESP8266_GM43.ino file
+         - update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
+     - Compile the sketches and flash the ESP8266 
+     - Install the ESP8266 and connect them to the devices (heaters, hot water tank, lighting relays)
+  - Arrived here, it's time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedule to send every hour a command to start all heating zones. There is no synchronization between the heating schedules of the main and backup servers.
+           
