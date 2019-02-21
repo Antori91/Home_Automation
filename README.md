@@ -60,6 +60,8 @@
          - Copy to the installation directory the nodejs and shell scripts. By default, this installation directory is "/volume1/@appstore/iot_domoticz" (Synology) and "/home/pi/iot_domoticz" (Raspberry)
          - Update the WiFi_DZ_MQTT_SecretKeys.js file according to the environment
          - Update myHeaters repository at line 133 of iot_Orchestrator.js file according to heating zones and heaters per heating zone used. Update also eventually lines 215 and 226 regarding Heating Schedule/Start and Heating Schedule/Stop actual names choosen
+         - Update lines, with the [$$DOMOTICZ_PARAMETER] tag, of iot_ESP8266.js file according to the environment
+         - Update Heaters repository and various parameters from line 74 to line 133 of iot_ACS712.js file  
          - Setup Crontab to launch the shell scripts at boot
      - Security setup: Local Networks (no username/password) set to accept connections without authentication from the Backup server and from "localhost;127.0.0.*"      
   - Backup the Domoticz database in the main server
@@ -67,13 +69,13 @@
      - Devices: use the main Domoticz database to setup again the devices
      - Blockly: enter again the blockly
      - Scripts: copy again all the (modified) scripts and setup again Crontab
-  -  Install the Cluster feature:
+  -  Install the Cluster feature :
      - Copy the cluster scripts (nodejs and shell) to the backup server
      - Update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
      - Setup Crontab to run it at boot
   - Install the Alarm scripts (nodejs and shell) in the dedicated Alarm server
   - Setup all the ESP8266:
-     - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json):
+     - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json) 
          - Update WiFi_OTA_MQTT_SecretKeys.h according to the environment
          - Update pubsub.h
          - Update heaters repository from lines 130 to 166 of iot_ESP8266_AC712.ino file
@@ -81,7 +83,7 @@
          - Update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
          - Compile the sketches and flash the ESP8266 
      - Install the ESP8266 and connect them to the devices (heaters, hot water tank, lighting relays)
-  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedules to send every hour a command to start all heating zones. In my environment, there is no synchronization between the heating schedules of the main and backup servers. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone  
+  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedules to send every hour a command to start all heating zones. In my environment, there is no synchronization between the heating schedules of the main and backup servers. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone   
            
 
            
