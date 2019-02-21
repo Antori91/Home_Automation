@@ -28,10 +28,10 @@
   - https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
 
 ## How to built the corresponding environment:
-  - Setup three servers. Synology: main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated alarm server. Mandatory software:
+  - Setup three servers. Synology: main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Mandatory software:
      - MQTT for the two Domoticz servers,
      - Node.js for all three (version greater than 6) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
-  - Install motionEye in the dedicated alarm server
+  - Install motionEye in the dedicated Alarm server
   - Install Domoticz in the main server:
      - Hardware: 
          - "Dummy"
@@ -79,7 +79,7 @@
          - update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
      - Compile the sketches and flash the ESP8266 
      - Install the ESP8266 and connect them to the devices (heaters, hot water tank, lighting relays)
-  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedules to send every hour a command to start all heating zones. In my environment, there is no synchronization between the heating schedules of the main and backup servers. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start and Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone  
+  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedules to send every hour a command to start all heating zones. In my environment, there is no synchronization between the heating schedules of the main and backup servers. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone  
            
 
            
