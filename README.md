@@ -54,9 +54,9 @@
          - Idx=1, "String" and name "HeatersActive" for Heaters status. Initial value: {"command" : "activateheaters", "28" : "On", "29" : "On", .... , "34" : "On"} where 28, 29 .... 34 are Heater IDX number
          - "Integer" and name "TWILIGHTimer0" for Lighting timer. Initial value: 0  
          - "Integer" and name "MezzaOverHeated" for one of heating cost optimizer rule. Initial value: 0 
-     - Blockly: enter the blockly according the GIF images given
+     - Blockly: enter the blockly according to the GIF images given
      - Scripts: 
-         - copy to installation directory the nodejs and shell scripts. By default, this installation directory is "/volume1/@appstore/iot_domoticz" (Synology) and "/home/pi/iot_domoticz" (Raspberry)
+         - copy to the installation directory the nodejs and shell scripts. By default, this installation directory is "/volume1/@appstore/iot_domoticz" (Synology) and "/home/pi/iot_domoticz" (Raspberry)
          - update the WiFi_DZ_MQTT_SecretKeys.js file according to the environment
          - update myHeaters repository at line 133 of iot_Orchestrator.js file according to heating zones and heaters per heating zone used. Update also eventually lines 215 and 226 regarding Heating Schedule/Start and Heating Schedule/Stop actual names choosen
          - setup Crontab to launch the shell scripts at boot
@@ -67,7 +67,7 @@
      - Blockly: enter again the blockly
      - Scripts: copy again all the (modified) scripts and setup again Crontab
   -  Install the Cluster feature :
-     - Copy the cluster scripts (nodejs and shell) in the backup server
+     - Copy the cluster scripts (nodejs and shell) to the backup server
      - update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
      - Setup Crontab to run it at boot
   - Install the Alarm scripts (nodejs and shell) in the dedicated Alarm server
