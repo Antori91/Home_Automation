@@ -40,7 +40,7 @@
      - Devices: 
          - "Security Panel"
          - Two protected "Light/Switch Switch" for Alarm status (Motion Sensor subtype) and Home Intrusion Alert (On/Off subtype). Define On/Off actions and Notification to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
-         - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each Light/Switch Switch camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the levels according to the PTZ Camera setpoint commands
+         - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each "Light/Switch Switch" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the level names and actions according to the PTZ Camera setpoint commands
          - "Temp + Humidity" for each Temperature sensor and one for Degrees.Days
          - one "Light/Switch Switch" for Electricity tariff
          - "P1 Smart Meter" for each heater and one for overall heating index meter 
@@ -70,6 +70,7 @@
      - Copy the cluster scripts (nodejs and shell) in the backup server
      - update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
      - Setup Crontab to run it at boot
+  - Install the Alarm scripts (nodejs and shell) in the dedicated Alarm server
   - Setup ESP8266
      - Using Arduino IDE:  
          - update WiFi_OTA_MQTT_SecretKeys.h according to the environment
