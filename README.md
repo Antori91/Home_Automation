@@ -34,10 +34,10 @@
   - Install motionEye in the dedicated Alarm server
   - Install Domoticz in the main server:
      - Hardware: 
-         - "Dummy"
-         - "MQTT Client Gateway with LAN interface" hardware with Remote address=localhost, port=1883 and Publish Topic=out
+         - "Dummy (Does nothing, use for virtual switches only)"
+         - "MQTT Client Gateway with LAN interface" with Remote address=localhost, port=1883 and Publish Topic=out
      - Cameras: add all cameras
-     - Devices: 
+     - Devices (Except Security Panel, all are Dummy Virtual sensors): 
          - "Security Panel"
          - Two protected "Light/Switch Switch" for Alarm status (Motion Sensor subtype) and Home Intrusion Alert (On/Off subtype). Define On/Off actions and Notification to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
          - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each "Light/Switch Switch" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the level names and actions according to the PTZ Camera setpoint commands
@@ -48,6 +48,7 @@
          - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to the heating zones
          - one "General	Text" to display the heating zones status
          - one "Thermostat SetPoint"
+         - two "General Custom Sensors" for Thermal loss and Cooling rate
          - "Light/Switch Switch" for each lighting zone
          - Three "Light/Switch Switch/Smoke Detector" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notification to send email/sms if failure 
      - User variables: 
