@@ -67,7 +67,7 @@
      - Devices: use the main Domoticz database to setup again the devices
      - Blockly: enter again the blockly
      - Scripts: copy again all the (modified) scripts and setup again Crontab
-  -  Install the Cluster feature :
+  -  Install the Cluster feature:
      - Copy the cluster scripts (nodejs and shell) to the backup server
      - Update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
      - Setup Crontab to run it at boot
