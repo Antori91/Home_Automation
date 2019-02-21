@@ -40,11 +40,11 @@
      - Devices: 
          - "Security Panel"
          - Two protected "Light/Switch Switch" for Alarm status (Motion Sensor subtype) and Home Intrusion Alert (On/Off subtype). Define On/Off actions and Notification to send email/sms (arm/disarm confirmation messages and intrusion alert message) 
-         - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each Light/Switch Switch camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the levels according to the PTZ Camera setpoint commands.
+         - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each Light/Switch Switch camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the levels according to the PTZ Camera setpoint commands
          - "Temp + Humidity" for each Temperature sensor and one for Degrees.Days
          - one "Light/Switch Switch" for Electricity tariff
          - "P1 Smart Meter" for each heater and one for overall heating index meter 
-         - One "Light/Switch Selector switches" for Heating main breaker. Define the levels, usually OFF/HORSGEL/ECO/CONFORT 
+         - One "Light/Switch Selector switches" for Heating main breaker. Define the levels OFF/HORSGEL/ECO/CONFORT 
          - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to my heating zones
          - one "General	Text" to display the heating zones status
          - one "Thermostat SetPoint"
