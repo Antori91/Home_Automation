@@ -41,14 +41,14 @@
          - "Security Panel"
          - Two protected "Light/Switch Switches" for Alarm status (Motion Sensor sub type) and Home Intrusion Alert (On/Off sub type). Define On/Off actions and Notifications to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
          - "Light/Switch Switch Media Player" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each "Light/Switch Switch Media Player" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the level names and actions according to the PTZ Camera setpoint commands
-         - "Temp + Humidity" for each Temperature sensor and one for Degrees.Days
+         - "Temp + Humidity" for each Temperature sensor and one for Degrees.Day
          - one "Light/Switch Switch On/Off" for Electricity tariff
          - "P1 Smart Meter" for each heater and one for overall heating index meter 
          - One "Light/Switch Selector switch" for Heating main breaker. Define the levels OFF/HORSGEL/ECO/CONFORT 
          - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to the heating zone names
          - one "General	Text" to display the heating zones status
          - one "Thermostat SetPoint"
-         - two "General Custom Sensors" for Thermal loss (°C/Degree.Day unit) and Cooling rate (Wh/Degree.Day unit)
+         - two "General Custom Sensors" for Thermal loss (°C/Degrees.Day unit) and Cooling rate (Wh/Degrees.Day unit)
          - "Light/Switch Switch On/Off" for each lighting zone
          - Three protected "Light/Switch Switch/Smoke Detectors" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notifications to send email/sms if failure 
      - User variables: 
