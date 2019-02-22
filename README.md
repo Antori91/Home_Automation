@@ -67,7 +67,7 @@
   - Backup the Domoticz database in the main server
   - Install Domoticz in the backup server:
      - Devices: use the main Domoticz database to setup again the devices
-     - Blockly: enter again the blocklys (except the HeatingOptimizer one)
+     - Blockly: delete the HeatingOptimizer one
      - Scripts: copy again all the (modified) scripts and setup again Crontab
   -  Install the Cluster feature :
      - Copy the cluster scripts (nodejs and shell) to the backup server
@@ -83,7 +83,7 @@
          - Update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
          - Compile the sketches and flash the ESP8266 
      - Install the ESP8266 and connect them to the devices (heaters, hot water tank, lighting relays)
-  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedules to send every hour a command to start all heating zones. In my environment, there is no synchronization between the heating schedules of the main and backup servers. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone   
+  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedules to send every hour a command to start all heating zones. In my environment, there is no synchronization between the heating schedules of the main and backup servers. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone     
            
 
            
