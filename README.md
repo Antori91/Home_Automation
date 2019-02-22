@@ -28,7 +28,7 @@
   - https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
 
 ## How to build the corresponding environment:
-  - Setup three servers. Synology (or Raspberry#0): main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Mandatory software:
+  - For full configuration, setup three servers. Synology (or Raspberry#0): main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Lite configuration can include for example only the main server (neither cluster feature nor alarm server). Mandatory software:
      - MQTT for the two Domoticz servers,
      - Node.js for all three (version greater than 6 for the two Raspberry#1 and #2) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
   - Install motionEye in the dedicated Alarm server. Update the /etc/motioneye/motion.conf file to have the following lines at the end of the file: webcontrol_html_output on, webcontrol_port XXXX where XXXX is the port number choosen (7999 by default), setup_mode off, webcontrol_parms 2 and webcontrol_localhost off
@@ -42,14 +42,14 @@
          - Two protected "Light/Switch Switches" for Alarm status (Motion Sensor sub type) and Home Intrusion Alert (On/Off sub type). Define On/Off actions and Notifications to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
          - "Light/Switch Switch Media Player" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each "Light/Switch Switch Media Player" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the level names and actions according to the PTZ Camera setpoint commands
          - "Temp + Humidity" for each Temperature sensor and one for Degrees.Days
-         - one "Light/Switch Switch" for Electricity tariff
+         - one "Light/Switch Switch On/Off" for Electricity tariff
          - "P1 Smart Meter" for each heater and one for overall heating index meter 
          - One "Light/Switch Selector switch" for Heating main breaker. Define the levels OFF/HORSGEL/ECO/CONFORT 
          - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to the heating zone names
          - one "General	Text" to display the heating zones status
          - one "Thermostat SetPoint"
          - two "General Custom Sensors" for Thermal loss and Cooling rate
-         - "Light/Switch Switch" for each lighting zone
+         - "Light/Switch Switch On/Off" for each lighting zone
          - Three "Light/Switch Switch/Smoke Detectors" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notifications to send email/sms if failure 
      - User variables: 
          - Idx=1, "String" and name "HeatersActive" for Heaters status. Initial value: {"command" : "activateheaters", "28" : "On", "29" : "On", .... , "34" : "On"} where 28, 29 .... 34 are Heater IDX number
@@ -62,17 +62,17 @@
          - Update myHeaters repository at line 133 of iot_Orchestrator.js file according to heating zones and heaters per heating zone used. Update also eventually lines 215 and 226 regarding Heating Schedule/Start and Heating Schedule/Stop actual names choosen
          - Update lines, with the [$$DOMOTICZ_PARAMETER] tag, of iot_ESP8266.js file according to the environment
          - Update Heaters repository and various parameters from line 74 to line 133 of iot_ACS712.js file  
-         - Setup Crontab to launch the shell scripts at boot
+         - Edit Crontab to run all the shell scripts at boot
      - Security setup: Local Networks (no username/password) set to accept connections without authentication from the Backup server and from "localhost;127.0.0.*"      
   - Backup the Domoticz database in the main server
   - Install Domoticz in the backup server:
-     - Devices: use the main Domoticz database to setup again the devices
-     - Blockly: delete the HeatingOptimizer one
+     - Devices: import the main Domoticz database to setup again the devices
+     - Blockly: importing at previous step the main Domoticz database has also import the blocklys. Delete the HeatingOptimizer one
      - Scripts: copy again all the (modified) scripts and setup again Crontab
   -  Install the Cluster feature :
      - Copy the cluster scripts (nodejs and shell) to the backup server
      - Update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
-     - Setup Crontab to run it at boot
+     - Edit Crontab to run the shell script at boot
   - Install the Alarm scripts (nodejs and shell) in the dedicated Alarm server
   - Setup all the ESP8266:
      - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json) 
@@ -82,8 +82,7 @@
          - Update lighting repository and various parameters from lines 36 to 74 of iot_ESP8266_GM43.ino file
          - Update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
          - Compile the sketches and flash the ESP8266 
-     - Install the ESP8266 and connect them to the devices (heaters, hot water tank, lighting relays)
-  - Arrived here, time to play with Domoticz...Enter for the main and backup Domoticz instances the heating schedules per heating zone. For the backup server, I've entered schedules to send every hour a command to start all heating zones. In my environment, there is no synchronization between the heating schedules of the main and backup servers. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone     
-           
+     - Deploy all the ESP8266 connecting them to the devices (heaters, hot water tank, lighting relays)
+  - Time to use Domoticz...Enter in the main and backup Domoticz instances the heating zone schedules. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone. In the backup server, I've entered schedules to send every hour a start to all heating zones.    
 
            
