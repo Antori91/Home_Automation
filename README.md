@@ -39,23 +39,23 @@
      - Cameras: add all cameras
      - Devices (Except Security Panel, all are Dummy Virtual sensors): 
          - "Security Panel"
-         - Two protected "Light/Switch Switches" for Alarm status (Motion Sensor sub type) and Home Intrusion Alert (On/Off sub type). Define On/Off actions and Notification to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
+         - Two protected "Light/Switch Switches" for Alarm status (Motion Sensor sub type) and Home Intrusion Alert (On/Off sub type). Define On/Off actions and Notifications to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
          - "Light/Switch Switch Media Player" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each "Light/Switch Switch Media Player" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the level names and actions according to the PTZ Camera setpoint commands
          - "Temp + Humidity" for each Temperature sensor and one for Degrees.Days
          - one "Light/Switch Switch" for Electricity tariff
          - "P1 Smart Meter" for each heater and one for overall heating index meter 
          - One "Light/Switch Selector switch" for Heating main breaker. Define the levels OFF/HORSGEL/ECO/CONFORT 
-         - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to the heating zones
+         - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to the heating zone names
          - one "General	Text" to display the heating zones status
          - one "Thermostat SetPoint"
          - two "General Custom Sensors" for Thermal loss and Cooling rate
          - "Light/Switch Switch" for each lighting zone
-         - Three "Light/Switch Switch/Smoke Detector" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notification to send email/sms if failure 
+         - Three "Light/Switch Switch/Smoke Detector" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notifications to send email/sms if failure 
      - User variables: 
          - Idx=1, "String" and name "HeatersActive" for Heaters status. Initial value: {"command" : "activateheaters", "28" : "On", "29" : "On", .... , "34" : "On"} where 28, 29 .... 34 are Heater IDX number
          - "Integer" and name "TWILIGHTimer0" for Lighting timer. Initial value: 0  
          - "Integer" and name "MezzaOverHeated" for one of heating cost optimizer rule. Initial value: 0 
-     - Blockly: enter the blockly according to the GIF images given
+     - Blockly: enter the blocklys according to the GIF images given
      - Scripts: 
          - Copy to the installation directory the nodejs and shell scripts. By default, this installation directory is "/volume1/@appstore/iot_domoticz" (Synology) and "/home/pi/iot_domoticz" (Raspberry)
          - Update the WiFi_DZ_MQTT_SecretKeys.js file according to the environment
@@ -67,7 +67,7 @@
   - Backup the Domoticz database in the main server
   - Install Domoticz in the backup server:
      - Devices: use the main Domoticz database to setup again the devices
-     - Blockly: enter again the blockly
+     - Blockly: enter again the blocklys(except the HeatingOptimizer one)
      - Scripts: copy again all the (modified) scripts and setup again Crontab
   -  Install the Cluster feature :
      - Copy the cluster scripts (nodejs and shell) to the backup server
