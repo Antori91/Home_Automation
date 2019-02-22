@@ -39,8 +39,8 @@
      - Cameras: add all cameras
      - Devices (Except Security Panel, all are Dummy Virtual sensors): 
          - "Security Panel"
-         - Two protected "Light/Switch Switch" for Alarm status (Motion Sensor subtype) and Home Intrusion Alert (On/Off subtype). Define On/Off actions and Notification to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
-         - "Light/Switch Switch" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each "Light/Switch Switch" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the level names and actions according to the PTZ Camera setpoint commands
+         - Two protected "Light/Switch Switches" for Alarm status (Motion Sensor sub type) and Home Intrusion Alert (On/Off sub type). Define On/Off actions and Notification to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
+         - "Light/Switch Switch Media Player" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each "Light/Switch Switch Media Player" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the level names and actions according to the PTZ Camera setpoint commands
          - "Temp + Humidity" for each Temperature sensor and one for Degrees.Days
          - one "Light/Switch Switch" for Electricity tariff
          - "P1 Smart Meter" for each heater and one for overall heating index meter 
