@@ -48,7 +48,7 @@
          - Two "Light/Switch Selector switches" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to the heating zone names
          - one "General	Text" to display the heating zones status
          - one "Thermostat SetPoint"
-         - two "General Custom Sensors" for Thermal loss and Cooling rate
+         - two "General Custom Sensors" for Thermal loss (°C/Degree.Day unit) and Cooling rate (Wh/Degree.Day unit)
          - "Light/Switch Switch On/Off" for each lighting zone
          - Three protected "Light/Switch Switch/Smoke Detectors" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notifications to send email/sms if failure 
      - User variables: 
@@ -63,13 +63,13 @@
          - Update lines, with the [$$DOMOTICZ_PARAMETER] tag, of iot_ESP8266.js file according to the environment
          - Update Heaters repository and various parameters from line 74 to line 133 of iot_ACS712.js file 
          - Update also House thermal characteristics from line 40 to line 44 of iot_ACS712.js file  
-         - Edit Crontab to run all the shell scripts at boot
+         - Add tasks to Synology DSM task scheduler or Edit Crontab (Raspberry) to run all the shell scripts at boot
      - Security setup: Local Networks (no username/password) set to accept connections without authentication from the Backup server and from "localhost;127.0.0.*"      
   - Backup the Domoticz database in the main server
   - Install Domoticz in the backup server:
      - Devices: import the main Domoticz database to setup again the devices
-     - Blockly: importing at previous step the main Domoticz database has also import the blocklys. Delete the HeatingOptimizer one
-     - Scripts: copy again all the (modified) scripts and setup again Crontab
+     - Blockly: importing at previous step the main Domoticz database also import the blocklys. Delete the HeatingOptimizer one
+     - Scripts: copy again all the (modified) scripts and edit again Crontab
   -  Install the Cluster feature :
      - Copy the cluster scripts (nodejs and shell) to the backup server
      - Update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
@@ -84,6 +84,6 @@
          - Update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
          - Compile the sketches and flash the ESP8266 
      - Deploy all the ESP8266 connecting them to the home devices (heaters, hot water tank, lighting relays)
-  - Time to use Domoticz...Enter in the main and backup Domoticz instances the heating zone schedules. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone. In the backup server, I've entered schedules to send every hour a start to all heating zones.        
+  - Time to use Domoticz...Enter in the main and backup Domoticz instances the heating zone schedules. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone. In the backup server, I've entered schedules to send every hour a start to all heating zones.           
 
            
