@@ -78,7 +78,7 @@
   - Setup all the ESP8266:
      - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json) 
          - Update WiFi_OTA_MQTT_SecretKeys.h according to the environment
-         - Update pubsub.h file in the corresponding Arduino library directory
+         - Update PubSubClient.h file in the corresponding Arduino library directory
          - Update heaters repository from lines 130 to 166 of iot_ESP8266_AC712.ino file
          - Update lighting repository and various parameters from lines 36 to 74 of iot_ESP8266_GM43.ino file
          - Update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
