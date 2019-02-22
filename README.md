@@ -50,11 +50,11 @@
          - one "Thermostat SetPoint"
          - two "General Custom Sensors" for Thermal loss and Cooling rate
          - "Light/Switch Switch" for each lighting zone
-         - Three "Light/Switch Switch/Smoke Detector" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notifications to send email/sms if failure 
+         - Three "Light/Switch Switch/Smoke Detectors" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notifications to send email/sms if failure 
      - User variables: 
          - Idx=1, "String" and name "HeatersActive" for Heaters status. Initial value: {"command" : "activateheaters", "28" : "On", "29" : "On", .... , "34" : "On"} where 28, 29 .... 34 are Heater IDX number
          - "Integer" and name "TWILIGHTimer0" for Lighting timer. Initial value: 0  
-         - "Integer" and name "MezzaOverHeated" for one of heating cost optimizer rule. Initial value: 0 
+         - "Integer" and name "MezzaOverHeated" for one of the heating cost optimizer rules. Initial value: 0 
      - Blockly: enter the blocklys according to the GIF images given
      - Scripts: 
          - Copy to the installation directory the nodejs and shell scripts. By default, this installation directory is "/volume1/@appstore/iot_domoticz" (Synology) and "/home/pi/iot_domoticz" (Raspberry)
@@ -67,7 +67,7 @@
   - Backup the Domoticz database in the main server
   - Install Domoticz in the backup server:
      - Devices: use the main Domoticz database to setup again the devices
-     - Blockly: enter again the blocklys(except the HeatingOptimizer one)
+     - Blockly: enter again the blocklys (except the HeatingOptimizer one)
      - Scripts: copy again all the (modified) scripts and setup again Crontab
   -  Install the Cluster feature :
      - Copy the cluster scripts (nodejs and shell) to the backup server
