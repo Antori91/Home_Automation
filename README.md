@@ -28,9 +28,9 @@
   - https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
 
 ## How to build the corresponding environment:
-  - Setup three servers. Synology: main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Mandatory software:
+  - Setup three servers. Synology (or Raspberry#0): main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Mandatory software:
      - MQTT for the two Domoticz servers,
-     - Node.js for all three (version greater than 6 for the two Raspberry) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
+     - Node.js for all three (version greater than 6 for the two Raspberry#1 and #2) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
   - Install motionEye in the dedicated Alarm server. Update the /etc/motioneye/motion.conf file to have the following lines at the end of the file: webcontrol_html_output on, webcontrol_port XXXX where XXXX is the port number choosen (7999 by default), setup_mode off, webcontrol_parms 2 and webcontrol_localhost off
   - Install Domoticz in the main server:
      - Hardware: 
