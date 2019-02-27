@@ -27,7 +27,7 @@
 
   - https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
 
-## To do the same DIY project:
+## The cookbook:
   - For full configuration, setup three servers. Synology (or Raspberry#0): main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Lite configuration can include for example only the main server (neither cluster feature nor alarm server). Mandatory software:
      - MQTT for the two Domoticz servers,
      - Node.js for all three (version greater than 6 for the two Raspberry#1 and #2) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
