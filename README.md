@@ -14,6 +14,8 @@
   - Temperature Sensors and Lighting/Heaters Actuators : ESP8266 (Standalone ESP-12E and Electrodragon IoT ESP8266 Relay Board) - Arduino sketches
   - Communication protocol : MQTT
 
+![Landscape Architecture](https://github.com/Antori91/Home_Automation/blob/master/High%20Availability%20Domoticz%20Cluster/Landscape%20Architecture.GIF)
+
 ## Forum topics about:
   - http://www.domoticz.com/forum/viewtopic.php?f=38&t=17032
   
