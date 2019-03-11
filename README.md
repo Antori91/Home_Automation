@@ -45,7 +45,6 @@
          - sudo apt-get update
          - sudo apt-get dist-upgrade
          - sudo bash -c 'cat << EOF >> /etc/apt/sources.list.d/nginx.list
-         -   # jessie-backports, from stretch-level but with no dependencies
          -   deb http://httpredir.debian.org/debian/ jessie-backports main contrib non-free
          - EOF' 
          - gpg --keyserver keyserver.ubuntu.com --recv-key  8B48AD6246925553      
