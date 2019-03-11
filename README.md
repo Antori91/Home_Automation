@@ -32,7 +32,29 @@
 ## The cookbook:
   - For full configuration, setup three servers. Synology (or Raspberry#0): main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Lite configuration can include for example only the main server (neither cluster feature nor alarm server). Mandatory software:
      - MQTT for the two Domoticz servers,
-     - Node.js for all three (version greater than 6 for the two Raspberry#1 and #2) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2)    
+     - Node.js for all three (version greater than 6 for the two Raspberry#1 and #2) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2):   
+         - sudo apt-get update
+         - sudo apt-get dist-upgrade
+         - curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
+         - sudo apt-get install -y nodejs
+         - npm install mqtt
+         - npm install ssh2
+         - npm install epoll
+         - npm install rpi-gpio
+     - nginx for Raspberry#1 (and Raspberry#0 if main server is not Synology). To install latest nginx (1.10.3) and ssl version on Raspbian Jessie:
+         - sudo apt-get update
+         - sudo apt-get dist-upgrade
+         - sudo bash -c 'cat << EOF >> /etc/apt/sources.list.d/nginx.list
+         -   # jessie-backports, from stretch-level but with no dependencies
+         -   deb http://httpredir.debian.org/debian/ jessie-backports main contrib non-free
+         - EOF' 
+         - gpg --keyserver keyserver.ubuntu.com --recv-key  8B48AD6246925553      
+         - gpg -a --export 8B48AD6246925553 | sudo apt-key add -
+         - gpg --keyserver keyserver.ubuntu.com --recv-key  7638D0442B90D010      
+         - gpg -a --export 7638D0442B90D010 | sudo apt-key add -
+         - sudo apt-get update     
+         - sudo apt-get install -t jessie-backports nginx
+         - sudo apt-get install -t jessie-backports openssl     
   - Install motionEye in the dedicated Alarm server. Update the /etc/motioneye/motion.conf file to have the following lines at the end of the file: webcontrol_html_output on, webcontrol_port XXXX where XXXX is the port number choosen (7999 by default), setup_mode off, webcontrol_parms 2 and webcontrol_localhost off
   - Install Domoticz in the main server:
      - Hardware: 
@@ -76,6 +98,11 @@
      - Copy the cluster scripts (nodejs and shell) to the backup server
      - Update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
      - Edit Crontab to run the shell script at boot
+     - Create a DUMMY reverse proxy rule in DSM (use unreachable IP address/Port in your environment). Note the directory name created by DSM to store the ssl certificate. Update the main nginx configuration file with this ssl directory name 
+     - Update again main server nginx config file and also backup server nginx config file to enter the correct path to Domoticz and motionEye
+     - Copy the nginx configuration files to main and backup server
+     - Test that your config files are ok with sudo nginx -t
+     - Ask nginx to use your config files with sudo nginx -s reload
   - Install the Alarm scripts (nodejs and shell) in the dedicated Alarm server
   - Setup all the ESP8266:
      - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json) 
