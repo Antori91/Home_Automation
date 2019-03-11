@@ -61,23 +61,23 @@
          - sudo apt-get update     
          - sudo apt-get install -t jessie-backports nginx
          - sudo apt-get install -t jessie-backports openssl     
-  - Install motionEye in the dedicated Alarm server. On Raspbian Jessie: 
-         - sudo apt-get update
-         - sudo apt-get install libav-tools // Déjà fait pour install avconv
-         - sudo apt-get install libpq5
-         - sudo apt-get install libmysqlclient18
-         - sudo wget https://github.com/Motion-Project/motion/releases/download/release-4.1.1/pi_jessie_motion_4.1.1-1_armhf.deb
-         - sudo dpkg -i pi_jessie_motion_4.1.1-1_armhf.deb    
-         - sudo apt-get install python-pip python-dev libssl-dev libcurl4-openssl-dev libjpeg-dev  
-         - sudo pip install motioneye
-         - sudo mkdir -p /etc/motioneye
-         - sudo cp /usr/local/share/motioneye/extra/motioneye.conf.sample /etc/motioneye/motioneye.conf
-         - sudo mkdir -p /var/lib/motioneye
-         - sudo cp /usr/local/share/motioneye/extra/motioneye.systemd-unit-local /etc/systemd/system/motioneye.service
-         - Update the /etc/motioneye/motion.conf file to have the following lines at the end of the file: webcontrol_html_output on, webcontrol_port XXXX where XXXX is the port number choosen (7999 by default), setup_mode off, webcontrol_parms 2 and webcontrol_localhost off
-         - sudo systemctl daemon-reload
-         - sudo systemctl enable motioneye
-         - sudo systemctl start motioneye         
+  - Install motionEye in the dedicated Alarm server. On Raspbian Jessie
+     - sudo apt-get update
+     - sudo apt-get install libav-tools // Déjà fait pour install avconv
+     - sudo apt-get install libpq5
+     - sudo apt-get install libmysqlclient18
+     - sudo wget https://github.com/Motion-Project/motion/releases/download/release-4.1.1/pi_jessie_motion_4.1.1-1_armhf.deb
+     - sudo dpkg -i pi_jessie_motion_4.1.1-1_armhf.deb    
+     - sudo apt-get install python-pip python-dev libssl-dev libcurl4-openssl-dev libjpeg-dev  
+     - sudo pip install motioneye
+     - sudo mkdir -p /etc/motioneye
+     - sudo cp /usr/local/share/motioneye/extra/motioneye.conf.sample /etc/motioneye/motioneye.conf
+     - sudo mkdir -p /var/lib/motioneye
+     - sudo cp /usr/local/share/motioneye/extra/motioneye.systemd-unit-local /etc/systemd/system/motioneye.service
+     - Update the /etc/motioneye/motion.conf file to have the following lines at the end of the file: webcontrol_html_output on, webcontrol_port XXXX where XXXX is the port number choosen (7999 by default), setup_mode off, webcontrol_parms 2 and webcontrol_localhost off
+     - sudo systemctl daemon-reload
+     - sudo systemctl enable motioneye
+     - sudo systemctl start motioneye         
   - Install Domoticz in the main server:
      - Hardware: 
          - "Dummy (Does nothing, use for virtual switches only)"
