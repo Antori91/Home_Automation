@@ -63,7 +63,7 @@
          - sudo apt-get install -t jessie-backports openssl     
   - Install motionEye in the dedicated Alarm server. On Raspbian Jessie
      - sudo apt-get update
-     - sudo apt-get install libav-tools // Déjà fait pour install avconv
+     - sudo apt-get install libav-tools
      - sudo apt-get install libpq5
      - sudo apt-get install libmysqlclient18
      - sudo wget https://github.com/Motion-Project/motion/releases/download/release-4.1.1/pi_jessie_motion_4.1.1-1_armhf.deb
