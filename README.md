@@ -31,7 +31,7 @@
 
 ## The cookbook:
   - For full configuration, setup three servers. Synology (or Raspberry#0): main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Lite configuration can include for example only the main server (neither cluster feature nor alarm server). Mandatory software:
-     - MQTT for the two Domoticz servers. On Raspbian Jessie,
+     - MQTT for the two Domoticz servers. On Raspbian Jessie:
          - wget http://repo.mosquitto.org/debian/mosquitto-repo.gpg.key
          - sudo apt-key add mosquitto-repo.gpg.key
          - cd /etc/apt/sources.list.d/
