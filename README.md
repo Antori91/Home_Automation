@@ -61,7 +61,7 @@
          - sudo apt-get update     
          - sudo apt-get install -t jessie-backports nginx
          - sudo apt-get install -t jessie-backports openssl     
-  - Install motionEye in the dedicated Alarm server. On Raspbian Jessie
+  - Install motionEye in the dedicated Alarm server. On Raspbian Jessie:
      - sudo apt-get update
      - sudo apt-get install libav-tools
      - sudo apt-get install libpq5
