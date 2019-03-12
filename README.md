@@ -147,16 +147,16 @@
      ```
   - Install the Alarm scripts (nodejs and shell) in the dedicated Alarm server
   - Setup all the ESP8266:
+     ``` 
      - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json) 
-     ```     
          - Update WiFi_OTA_MQTT_SecretKeys.h according to the environment
          - Update PubSubClient.h file in the corresponding Arduino library directory
          - Update heaters repository from lines 130 to 166 of iot_ESP8266_AC712.ino file
          - Update lighting repository and various parameters from lines 36 to 74 of iot_ESP8266_GM43.ino file
          - Update temperature sensors repository and various parameters from lines 57 to 62 of iot_ESP8266_DHT22.ino file
-         - Compile the sketches and flash the ESP8266
-     ```       
+         - Compile the sketches and flash the ESP8266  
      - Deploy all the ESP8266 connecting them to the home devices (heaters, hot water tank, lighting relays)
+     ``` 
   - Time to use Domoticz...Enter in the main and backup Domoticz instances the heating zone schedules. To start or stop a heating zone at a given hour, you have to enter in Timers of Heating Schedule/Start or Heating Schedule/Stop devices the command ON on Time for the level corresponding to the heating zone. In the backup server, I've entered schedules to send every hour a start to all heating zones.           
 
            
