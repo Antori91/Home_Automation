@@ -68,7 +68,7 @@
          - sudo apt-get install -t jessie-backports openssl  
      ```    
   - Install motionEye in the dedicated Alarm server. On Raspbian Jessie:
-     ```
+     ```shell
      - sudo apt-get update
      - sudo apt-get install libav-tools
      - sudo apt-get install libpq5
@@ -129,13 +129,13 @@
      - Security setup: Local Networks (no username/password) set to accept connections without authentication from the Backup server and from "localhost;127.0.0.*"      
   - Backup the Domoticz database in the main server
   - Install Domoticz in the backup server:
-     ```Text
+     ```text
      - Devices: import the main Domoticz database to setup again the devices
      - Blockly: importing at previous step the main Domoticz database also import the blocklys. Delete the HeatingOptimizer one
      - Scripts: copy again all the (modified) scripts and edit again Crontab
      ```
   -  Install the Cluster feature :
-     ```Text
+     ```text
      - Copy the cluster scripts (nodejs and shell) to the backup server
      - Update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
      - Edit Crontab to run the shell script at boot
