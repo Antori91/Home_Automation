@@ -94,7 +94,7 @@
      ```
      - Cameras: add all cameras
      - Devices (Except Security Panel, all are Dummy Virtual sensors): 
-     ```
+     ```Text
          - "Security Panel"
          - Two protected "Light/Switch Switches" for Alarm status (Motion Sensor sub type) and Home Intrusion Alert (On/Off sub type). Define On/Off actions and Notifications to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
          - "Light/Switch Switch Media Player" for each (PTZ or non PTZ) camera and one additional "Light/Switch Selector Switch" for each PTZ camera. For each "Light/Switch Switch Media Player" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For "Light/Switch Selector Switch", define the level names and actions according to the PTZ Camera setpoint commands
@@ -129,10 +129,13 @@
      - Security setup: Local Networks (no username/password) set to accept connections without authentication from the Backup server and from "localhost;127.0.0.*"      
   - Backup the Domoticz database in the main server
   - Install Domoticz in the backup server:
+     ```Text
      - Devices: import the main Domoticz database to setup again the devices
      - Blockly: importing at previous step the main Domoticz database also import the blocklys. Delete the HeatingOptimizer one
      - Scripts: copy again all the (modified) scripts and edit again Crontab
+     ```
   -  Install the Cluster feature :
+     ```Text
      - Copy the cluster scripts (nodejs and shell) to the backup server
      - Update myIDXtoSync repository at line 118 of mqtt_Cluster.js file according to the devices to synchronize 
      - Edit Crontab to run the shell script at boot
@@ -141,6 +144,7 @@
      - Copy the nginx configuration files to main and backup server
      - Test that your config files are ok with sudo nginx -t
      - Ask nginx to use your config files with sudo nginx -s reload
+     ```
   - Install the Alarm scripts (nodejs and shell) in the dedicated Alarm server
   - Setup all the ESP8266:
      - Using Arduino IDE (Files/Preferences/Additional Board Manager set to http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json) 
