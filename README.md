@@ -17,7 +17,6 @@
 ![Landscape Architecture](https://github.com/Antori91/Home_Automation/blob/master/Architecture%20Overview.GIF)
 
 ## Forum topics about:
-```
   - https://www.domoticz.com/forum/viewtopic.php?f=38&t=17032
   
   - https://www.domoticz.com/forum/viewtopic.php?f=38&t=24088
@@ -29,7 +28,7 @@
   - https://www.domoticz.com/forum/viewtopic.php?f=38&t=23914
 
   - https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
-```
+
 ## The cookbook:
   - For full configuration, setup three servers. Synology (or Raspberry#0): main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Lite configuration can include for example only the main server (neither cluster feature nor alarm server). Mandatory software:
      - MQTT for the two Domoticz servers. On Raspbian Jessie:
