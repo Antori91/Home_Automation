@@ -96,7 +96,7 @@
      - Devices (Except Security Panel, all are Dummy Virtual sensors): 
      ```
          - "Security Panel"
-         - one protected "Light/Switch, Switch, MotionSensor" for Alarm status and one protected "Light/Switch, Switch, On/Off" for Home Intrusion Alert. Define On/Off actions and Notifications to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
+         - one protected "Light/Switch, Switch, Motion Sensor" for Alarm status and one protected "Light/Switch, Switch, On/Off" for Home Intrusion Alert. Define On/Off actions and Notifications to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
          - one "Light/Switch, Switch, Media Player" for each (PTZ or non PTZ) camera and one additional "Light/Switch, Selector Switch, Selector" for each PTZ camera. For each "Light/Switch, Switch, Media Player" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For each "Light/Switch, Selector Switch, Selector", define the level names and actions according to the PTZ Camera setpoint commands
          - one "Temp+Hum" and one "Temperature" for each Temperature sensor and one "Temp+Hum" for Degrees.Day
          - one "Light/Switch, Switch, On/Off" for Electricity tariff
