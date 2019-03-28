@@ -96,17 +96,17 @@
      - Devices (Except Security Panel, all are Dummy Virtual sensors): 
      ```
          - "Security Panel"
-         - one protected "Light/Switch, Switch, Motion Sensor" for Alarm status and one protected "Light/Switch, Switch, On/Off" for Home Intrusion Alert. Define On/Off actions and Notifications to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
-         - one "Light/Switch, Switch, Media Player" for each (PTZ or non PTZ) camera and one additional "Light/Switch, Selector Switch, Selector" for each PTZ camera. For each "Light/Switch, Switch, Media Player" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For each "Light/Switch, Selector Switch, Selector", define the level names and actions according to the PTZ Camera setpoint commands
-         - one "Temp+Hum" and one "Temperature" for each Temperature sensor and one "Temp+Hum" for Degrees.Day
-         - one "Light/Switch, Switch, On/Off" for Electricity tariff
-         - one "P1 Smart Meter, Energy" for each heater and one for overall heating index meter 
+         - One protected "Light/Switch, Switch, Motion Sensor" for Alarm status and one protected "Light/Switch, Switch, On/Off" for Home Intrusion Alert. Define On/Off actions and Notifications to send email/sms (arm/disarm confirmation messages and intrusion alert message). To send SMS, I use Web REST API of the french FREE Telco operator 
+         - One "Light/Switch, Switch, Media Player" for each (PTZ or non PTZ) camera and one additional "Light/Switch, Selector Switch, Selector" for each PTZ camera. For each "Light/Switch, Switch, Media Player" camera, define On/Off actions to activate/disactivate motionEye motion detection for this camera. For each "Light/Switch, Selector Switch, Selector", define the level names and actions according to the PTZ Camera setpoint commands
+         - One "Temp+Hum" and one "Temperature" for each Temperature sensor and one "Temp+Hum" for Degrees.Day
+         - One "Light/Switch, Switch, On/Off" for Electricity tariff
+         - One "P1 Smart Meter, Energy" for each heater and one for overall heating index meter 
          - One "Light/Switch, Selector Switch, Selector" for Heating main breaker. Define the levels OFF/HORSGEL/ECO/CONFORT 
          - Two "Light/Switch, Selector Switch, Selector" for Heating Schedule/Start and Heating Schedule/Stop. Define the levels according to the heating zone names
-         - one "General, Text" to display the heating zones status
-         - one "Thermostat, SetPoint"
-         - two "General, Custom Sensor" for Thermal loss (°C/Degrees.Day unit) and Cooling rate (Wh/Degrees.Day unit)
-         - one "Light/Switch, Switch, On/Off" for each lighting zone
+         - One "General, Text" to display the heating zones status
+         - One "Thermostat, SetPoint"
+         - Two "General, Custom Sensor" for Thermal loss (°C/Degrees.Day unit) and Cooling rate (Wh/Degrees.Day unit)
+         - One "Light/Switch, Switch, On/Off" for each lighting zone
          - Three protected "Light/Switch, Switch, Smoke Detector" for Failure status regarding Temperature sensors, Lighting server and Alarm server. Define On action and Notifications to send email/sms if failure 
      ```
      - User variables: 
