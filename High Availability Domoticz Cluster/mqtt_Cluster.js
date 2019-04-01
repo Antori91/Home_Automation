@@ -2,6 +2,9 @@
 // ***** mtCluster:
 //        - High Availibilty Active/Passive Domoticz Cluster
 //        - Script for the Passive/Backup server *****
+// V0.21 - April 2019
+          // Improvement : ["mqtt/out", "SelectorSwitch"] using always passcode now (work for protected and non protected selector switches devices)
+          // Fire Alarm server (including its Temp sensor) added to the repository
 // V0.20 - February 2019
           // Change : Raise alert if backup server not fully operational ONLY after LTIMEOUT heartbeat failures (to avoid false alerts during server maintenance)
           // Improvement : Before starting the Backup DZ Failover, try to restart the Main Domoticz instance using SSH 
@@ -98,7 +101,7 @@ function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Do
           if( this.DeviceType === "Light/Switch" )
               if( JSONmessage.nvalue == 0 ) OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"Off\"}";
               else OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"On\"}";   
-          if( this.DeviceType === "SelectorSwitch" ) OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"Set Level\", \"level\" : " + JSONmessage.svalue1 + "}";
+          if( this.DeviceType === "SelectorSwitch" ) OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"Set Level\", \"level\" : " + JSONmessage.svalue1 + ", \"passcode\" : " + MyJSecretKeys.ProtectedDevicePassword + "}";
           if( this.DeviceType === "Thermostat" ||  this.DeviceType === "Temperature" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + "\"}";               
           PassiveSvr.publish('domoticz/in', OUTsyncmsg );  
           if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming message sent to Backup domoticz/in server: " + OUTsyncmsg);
@@ -120,6 +123,8 @@ var   myIDXtoSync      = [ new IDXtoSync( 50, "mqtt/out", "Light/Switch" ),  new
                            new IDXtoSync( 34, "mqtt/in", ""),   // 34=Hot Water Tank
                            new IDXtoSync( 27, "mqtt/in", "" ),  new IDXtoSync( 28, "mqtt/in", "" ),   new IDXtoSync( 29, "mqtt/in", ""), new IDXtoSync( 30, "mqtt/in", "" ),   new IDXtoSync( 31, "mqtt/in", ""),   // Ground Floor Heaters
                            new IDXtoSync( 35, "mqtt/in", "" ),  new IDXtoSync( 36, "mqtt/in", "" ),   new IDXtoSync( 37, "mqtt/in", ""), new IDXtoSync( 38, "mqtt/in", "" ),   // First Floor Heaters   
+                           new IDXtoSync( MyJSecretKeys.idx_FireAlarmTempHum, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_FireAlarmHeatidx, "mqtt/in", "" ), // Temp sensor of Fire Alarm server
+                           new IDXtoSync( MyJSecretKeys.idx_FireALarmStatus, "mqtt/out", "SelectorSwitch" ), // Fire Alarm server status
                            new IDXtoSync( MyJSecretKeys.idx_SecPanel, "mqtt/out", "Secpanel" ), // Secpanel 
                            new IDXtoSync( 17, "mqtt/out", "SelectorSwitch" ), new IDXtoSync( 16, "mqtt/out", "Thermostat" ) ];   //  17=Main heating breaker (OFF/HORSGEL/ECO/CONFORT), 16=Heating thermostat setpoint
                            // heating display/schedule to add to the repository in the future
