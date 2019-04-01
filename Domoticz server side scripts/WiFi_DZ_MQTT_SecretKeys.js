@@ -26,7 +26,7 @@ Varname_UnactiveHeaters    : 'HeatersActive',                    //[$$DOMOTICZ_P
 ProtectedDevicePassword    : 'XXXX',                             //[$$DOMOTICZ_PARAMETER] - Dz password for protected device
 idx_SecPanel               : 'XX',                               //[$$DOMOTICZ_PARAMETER] - Dz Security Panel
 SecPanel_Seccode           : '------------------------------',   //[$$DOMOTICZ_PARAMETER] - Dz Security Panel Password MD5 Encrypted 
-idx_AlarmALERT             : 'XX',                                //[$$DOMOTICZ_PARAMETER] - Alarm Alert status - Dz "ALERTE Intrusion Maison" Device 
+idx_AlarmALERT             : 'XX',                               //[$$DOMOTICZ_PARAMETER] - Alarm Alert status - Dz "ALERTE Intrusion Maison" Device 
 idx_AlarmARM               : 'XX',                               //[$$DOMOTICZ_PARAMETER] - Alarm Armed status - Dz "Maison sous Alarme" Device
 idx_FireALarmStatus        : 'XX',                               //[$$DOMOTICZ_PARAMETER] - Fire Alarm device IDX (Selector)
 idx_FireAlarmTempHum       : '66',                               //[$$DOMOTICZ_PARAMETER] - Fire Alarm temp/humidity device IDX
