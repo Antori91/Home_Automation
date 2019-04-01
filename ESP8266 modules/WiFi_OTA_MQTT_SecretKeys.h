@@ -1,3 +1,8 @@
+// @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
+// V0.3 - March 2019
+//        Fire Alarm Domoticz devices IDX added
+// V0.2 - August 2018
+
 #define WIFI_1            "YOUR_SSID_1"
 #define WIFI_2            "YOUR_SSID_2"
 #define WIFI_3            "YOUR_SSID_3"
@@ -19,4 +24,7 @@
 IPAddress gateway(192,168,X,X);
 IPAddress subnet(255,255,255,0);
 #endif
-
+#define DZ_DEVICE_PASSWORD  "----"   // Domoticz Password for protected device
+#define FIREALARM_SWITCH_IDX  "XX"   // Domoticz Fire Alarm device IDX (Selector)
+#define FIREALARM_TEMP_IDX    "66"   // Domoticz Fire Alarm temp/humidity device IDX
+#define FIREALARM_HEAT_IDX    "67"   // Domoticz Fire Alarm temp heat index device IDX
