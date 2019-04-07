@@ -52,7 +52,7 @@
          - npm install epoll
          - npm install rpi-gpio
      ```    
-     - nginx for Raspberry#1 (and Raspberry#0 if main server is not Synology). To install latest nginx (1.10.3) and ssl latest version on Raspbian Jessie:
+     - nginx for Raspberry#1 (and Raspberry#0 if main server is not Synology). To install latest nginx (1.10.3) and ssl version on Raspbian Jessie:
      ```
          - sudo apt-get update
          - sudo apt-get dist-upgrade
