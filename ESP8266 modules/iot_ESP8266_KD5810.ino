@@ -4,6 +4,9 @@
 //       Get Smoke alert from Pin7 of KD5810 
 //       Relay 1 used to power up (arm) and power down (disarm) Smoke Detector: COM to +9V and NO to +9V of Smoke Detector 
 //       Relay 2 used to force Smoke Detector Siren to run                    : COM to +9V and NO to KD5810 pin16
+//  V0.12 - April 2019
+//        Change: increase KD5810 I/O pin filtering time - Allows KD5810 to go back to non smoke condition
+//        Improvement: raise Domoticz failure flag if DHT22 Temp sensor failure 
 //  V0.11 - April 2019
 //        Initial release 
 
@@ -19,7 +22,7 @@
 
 // EDragon/ESP8266 board parameters
 boolean ColdBoot                  = true;
-#define FILTER                       3 // N+1 same readings every DELAY_FILTER ms must be read to validate GPIO reading ! 
+#define FILTER                       5 // N+1 (150 ms) same readings every DELAY_FILTER ms must be read to be sure about Smoke Detector I/O status 
 #define DELAY_FILTER                25 // Delay in ms between two readings
 #define Relay1                      12 // Digital Pin 12
 #define Relay2                      13 // Digital Pin 13
@@ -63,13 +66,15 @@ int         dz_FIREALARM_STATE;                               // Domoticz device
 int         dz_NOT_SYNC             = -1;                     // Dz synchronized with the Fire Alarm server status: -1=Unknown; 0=OK (synchronized), 1=To resynchronize, 2=Failure    
 
 // Temp sensor parameters
-#define   ADAFRUIT_LIB  true              // Temp sensor installed. Undefine otherwise
+#define   ADAFRUIT_LIB  true                                  // Temp sensor installed. Undefine otherwise
 #ifdef    ADAFRUIT_LIB
 #include "DHT.h"
 #define   DHTTYPE DHT22
 DHT       dht(DHTPIN, DHTTYPE);
-String    dz_FIREALARM_TEMP_IDX  = FIREALARM_TEMP_IDX;  // Corresponding Domoticz temp/humidity device IDX
-String    dz_FIREALARM_HEAT_IDX  = FIREALARM_HEAT_IDX;  // Corresponding Domoticz temp heat index device IDX
+String    dz_FIREALARM_TEMP_IDX  = FIREALARM_TEMP_IDX;        // Corresponding Domoticz temp/humidity device IDX
+String    dz_FIREALARM_HEAT_IDX  = FIREALARM_HEAT_IDX;        // Corresponding Domoticz temp heat index device IDX
+int       TempSensorTimeOut      = 2 * (60 / DZ_SYNC_TIMER);  // If Temp Sensor is not available for n hours, raise Domoticz failure flag
+String    dz_TEMP_FAILURE_IDX    = "43";                      // Domoticz Temp sensors failure flag IDX
 #endif
                  
 void eventWiFi(WiFiEvent_t event) {
@@ -130,7 +135,7 @@ String connectionStatus( int which ) {
 void setup() {   // ****************
       
    Serial.begin(115200);
-   Serial.println("iot_EDragon_KD5810_FIREalarm Booting - Firmware Version : 0.11");
+   Serial.println("iot_EDragon_KD5810_FIREalarm Booting - Firmware Version : 0.12");
    
 #ifdef ADAFRUIT_LIB
    dht.begin();    // Set DHT items 
@@ -343,7 +348,7 @@ void reconnect() {   // ****************
                   
         // Say now "Me the Fire Alarm Server, I'm here" 
         if( ColdBoot )
-             string = "{\"command\" : \"addlogmessage\", \"message\" : \"iot_EDragon_KD5810_FIREalarm Online - COLD BOOT Reason : " + ESP.getResetReason() + " - Firmware Version : 0.11 - SSID/IP/MAC : " + WiFi.SSID() + "/" + WiFi.localIP().toString() + "/" + WiFi.macAddress().c_str() + "\"}";
+             string = "{\"command\" : \"addlogmessage\", \"message\" : \"iot_EDragon_KD5810_FIREalarm Online - COLD BOOT Reason : " + ESP.getResetReason() + " - Firmware Version : 0.12 - SSID/IP/MAC : " + WiFi.SSID() + "/" + WiFi.localIP().toString() + "/" + WiFi.macAddress().c_str() + "\"}";
         else if ( WiFiWasRenew )
                   string = "{\"command\" : \"addlogmessage\", \"message\" : \"iot_EDragon_KD5810_FIREalarm Online - WIFI CONNECTION RENEWED - SSID/IP/MAC : " + WiFi.SSID() + "/" + WiFi.localIP().toString() + "/" + WiFi.macAddress().c_str() + "\"}";   
              else string = "{\"command\" : \"addlogmessage\", \"message\" : \"iot_EDragon_KD5810_FIREalarm Online - MQTT CONNECTION RENEWED - SSID/IP/MAC : " + WiFi.SSID() + "/" + WiFi.localIP().toString() + "/" + WiFi.macAddress().c_str() + "\"}";   
@@ -437,8 +442,28 @@ void loop() {   // ****************
        float h = dht.readHumidity();
        float hic;
 
-       if( isnan(t) || isnan(h) ) Serial.println("DHT22 Reading Error");
+       if( isnan(t) || isnan(h) ) {
+           Serial.println("DHT22 Reading Error");
+           if( TempSensorTimeOut > 0 )  {
+               TempSensorTimeOut--;
+               string = INDOOR_RDC_TEMP_ID;
+               string = "{\"command\" : \"addlogmessage\", \"message\" : \"Error - " + string + " has returned a wrong value (NAN).\"}";
+               string.toCharArray( msgToPublish, MQTT_MAX_PACKET_SIZE);
+               Serial.print(msgToPublish);
+               Serial.print(" Published to domoticz/in. Status=");
+               if ( client.publish(topic_Domoticz_IN, msgToPublish) ) Serial.println("OK\n"); else Serial.println("KO\n"); 
+           }  // if( TempSensorTimeOut > 0 )  {   
+           else if( TempSensorTimeOut == 0 ) {
+               TempSensorTimeOut--;
+               string = "{\"command\" : \"switchlight\", \"idx\" : " + dz_TEMP_FAILURE_IDX + ", \"switchcmd\" : \"On\", \"passcode\" : " + DZ_DEVICE_PASSWORD + "}"; 
+               string.toCharArray( msgToPublish, MQTT_MAX_PACKET_SIZE);
+               Serial.print(msgToPublish);
+               Serial.print(" Published to domoticz/in. Status=");
+               if ( client.publish(topic_Domoticz_IN, msgToPublish) ) Serial.println("OK\n"); else Serial.println("KO\n");            
+           } // if( TempSensorTimeOut == 0 )  
+       } // if( isnan(t) || isnan(h) ) {
        else {
+           TempSensorTimeOut = 2 * (60 / DZ_SYNC_TIMER);
            dtostrf(t, 5, 1, str_t);  
            dtostrf(h, 5, 1, str_h); 
            hic = dht.computeHeatIndex(t, h, false); dtostrf(hic, 5, 1, str_hic);
@@ -462,10 +487,11 @@ void loop() {   // ****************
   } // if ( min > timer  ) { 
   
   // Check if we have a Fire Alert !
-  if( KD5810_FIREALARM_STATE == ARM ) {
+  if( KD5810_FIREALARM_STATE == ARM || KD5810_FIREALARM_STATE == FIRE ) {
       cstate_KD5810 = digitalReadF(KD5810_IO_pin7,false);
       // Serial.print("KD5810_IO_pin7 = "); Serial.println(cstate_KD5810);      
-      if( cstate_KD5810 == KD5810_ALERT ) { KD5810_FIREALARM_STATE = FIRE; Serial.println("SMOKE detected"); dz_NOT_SYNC = 1; }
+      if( KD5810_FIREALARM_STATE == ARM  && cstate_KD5810 == KD5810_ALERT )   { KD5810_FIREALARM_STATE = FIRE; Serial.println("SMOKE detected");              dz_NOT_SYNC = 1; }
+      if( KD5810_FIREALARM_STATE == FIRE && cstate_KD5810 == KD5810_NOALERT ) { KD5810_FIREALARM_STATE = ARM;  Serial.println("Back to NON SMOKE condition"); dz_NOT_SYNC = 1; }
   }  // if( KD5810_FIREALARM_STATE == ARM ) {
   
   // Synchronize Domoticz if necessary
