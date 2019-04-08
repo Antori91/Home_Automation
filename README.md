@@ -1,4 +1,4 @@
-# Home Automation DIY project using Domoticz, motionEye and ESP8266
+# Home Automation DIY project using ESP8266 with Domoticz and motionEye 
 
 ## Main achievements:
   - Smart electrical heating management using existing basic heaters. Heating zones and quick entering of heating zone schedules 
