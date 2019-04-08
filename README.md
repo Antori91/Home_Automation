@@ -1,4 +1,4 @@
-# Home Automation DIY project using ESP8266 with Domoticz, motionEye and Node.js server side scripts
+# Home Automation DIY project using ESP8266 and Node.js server side scripts with Domoticz and motionEye 
 
 ## Main achievements:
   - Smart electrical heating management using existing basic heaters. Heating zones and quick entering of heating zone schedules 
