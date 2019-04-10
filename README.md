@@ -1,4 +1,5 @@
 # Home Automation DIY project using ESP8266-Arduino, Node.js, Domoticz and motionEye 
+Powerful and low price sensors/actuators. Tailored solution leveraging home devices. 
 
 ## Main achievements:
   - Smart electrical heating management using existing basic heaters. Heating zones and quick entering of heating zone schedules 
