@@ -3,6 +3,8 @@
 //        - Manage Heaters and Heating Zones (Scheduled TOP Start/Stop),
 //        - Compute and log heaters characteristics,
 //        - Monitor ESP8266-ACS712/Heaters, ESP8266/Lighting and Raspberry/Alarm servers *****
+// V0.95 - April 2019
+           // Monitor the new Fire Alarm server. If failure, raise "Panne Alarme" - idxAlarmFailureFlag Dz device
 // V0.91 - February 2019
            // Improvement : Use command-line argument to define execution hardware (i.e. avoid a slightly different version per platform)
 // V0.9 - August 2018
@@ -41,8 +43,12 @@ const LIGHTING_ONLINE  = "Lighting Online";
 const LIGHTING_OFFLINE = "Lighting went Offline";
 const ALARM_ONLINE     = "ALARM Server ON LINE";
 const ALARM_OFFLINE    = "ALARM Server went OFF LINE";
+const FIREALARM_ONLINE = "FIREalarm Online";
+const FIREALARM_OFFLINE= "FIREalarm went Offline";
+
 var   myLighting       = 0;  // Lighting status,      0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
 var   myAlarmSvr       = 0;  // Alarm server status,  0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
+var   myFireAlarmSvr   = 0;  // Fire Alarm server status,  0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
 const HeatingTimer     = 60; // Send heating command to Heaters and Log latest heaters characteristics computed every n minutes
 
 // ** Domoticz Parameters and communication functions **
@@ -132,12 +138,12 @@ function heater( MacAddress, IDX, Nominal, HeaterName, Zone1, Zone2 ) {
 }   // function heater( IDX
 var   myHeaters        = [ new heater("3A73F0", 28, 1426, "ENTREE", "10", "40" ),     new heater("3B2071", 29, 1384, "CUISINE", "10", "40"),     new heater("3B1D5F", 27, 1426, "SALLE A MANGER", "20", "40"),
                            new heater("FA9ECE", 30, 1261, "SALON SUD", "30", "40"),   new heater("3B1A D", 31, 1261, "SALON NORD", "30", "40"),
-                           new heater("94D6A3", 35, 1239, "CH4", "50", "100"),      new heater("94CD66", 36, 909,  "CH3", "60", "100" ),   new heater("94CDC2", 37, 1422, "CH2", "70", "100"), 
+                           new heater("94D6A3", 35, 1239, "CH4", "50", "100"),        new heater("94CD66", 36, 909,  "CH3", "60", "100" ),       new heater("94CDC2", 37, 1422, "CH2", "70", "100"), 
                            new heater("9497B1", -1, 500,  "SDB", "80", "100"),        new heater("65DEF6", 38, 1442, "PARENTAL", "90", "100"),   new heater("412A10", 34, 1603, "ECS", "-1", "-1") ];
                            
 // *************** MAIN START HERE ***************
-if( process.argv[ 2 ] === 'RASPBERRY') console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v0.91 starting - Server platform set to RASPBERRY ***\n");
-else console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v0.91 starting - Server platform set to SYNOLOGY ***\n");
+if( process.argv[ 2 ] === 'RASPBERRY') console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v0.95 starting - Server platform set to RASPBERRY ***\n");
+else console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v0.95 starting - Server platform set to SYNOLOGY ***\n");
 
 // Get from Dz the latest heating command saved and display it 
 JSON_API.path = '/json.htm?type=command&param=getuservariable&idx=' + Var_UnactiveHeaters;
@@ -184,6 +190,12 @@ setInterval(function(){
             DomoticzJsonTalk( JSON_API, RaisefailureFlag, idxAlarmFailureFlag );
             myAlarmSvr = 3; 
          }  // if( myAlarmSvr === 2 ) {
+    if( myFireAlarmSvr === 1 ) myFireAlarmSvr = 2;
+    else if( myFireAlarmSvr === 2 ) {
+            JSON_API.path = '/json.htm?type=devices&rid=' + idxAlarmFailureFlag;
+            DomoticzJsonTalk( JSON_API, RaisefailureFlag, idxAlarmFailureFlag );
+            myFireAlarmSvr = 3; 
+         }  // if( myFireAlarmSvr === 2 ) {     
     myHeaters.forEach(function( value ) {
        if( value.DeviceFault === 1 ) value.DeviceFault = 2;
        else if( value.DeviceFault === 2 ) {
@@ -287,6 +299,20 @@ client.on('message', function (topic, message) {
             console.log( message + "\n");
             myAlarmSvr = 0;
         } // if( pos != -1 )  
+        // Fire alarm-svr message
+        if( VERBOSE ) console.log("Checking for FIRE ALARM-SVR event...");
+        var pos = message.indexOf(FIREALARM_OFFLINE);
+        if( pos != -1 )  { // Raise alert, MQTT said FIRE ALARM-SVR is dead !
+            console.log("\n*** " + new Date() + " == FIRE ALARM-SVR FAILURE ==");
+            console.log( message + "\n");
+            myFireAlarmSvr = 1;
+        } // if( pos != -1 )  
+        pos = message.indexOf(FIREALARM_ONLINE);
+        if( pos != -1 )  { // Reset alert, FIRE ALARM-SVR is back !
+            console.log("\n*** " + new Date() + " == FIRE ALARM-SVR ONLINE ==");
+            console.log( message + "\n");
+            myFireAlarmSvr = 0;
+        } // if( pos != -1 )
         // heater message        
         if( VERBOSE ) console.log("Checking for Heater event...");
         var pos = message.indexOf(HEATER_OFFLINE);
