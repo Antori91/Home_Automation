@@ -10,7 +10,7 @@ Powerful and low price sensors/actuators. Tailored solution leveraging existing 
   - Robust implementation with two Domoticz synchronized servers (failover cluster) and alerting on sensors/actuators failure 
 
 ## Architecture:
-  - Domoticz High Availability Cluster : Synology Dz V3.5877 (Main) - Raspberry Dz V4.97 (Backup) - Node.js scripts
+  - Domoticz High Availability Cluster : Synology Dz V4.10693 (Main) - Raspberry Dz V4.10717 (Backup) - Node.js scripts
   - Alarm server : Raspberry - motionEye - iot_ALARM-SVR Node.js script
   - Temperature Sensors and Lighting/Heaters Actuators : ESP8266 (Standalone ESP-12E and Electrodragon IoT ESP8266 Relay Board) - Arduino sketches
   - Communication protocol : MQTT
