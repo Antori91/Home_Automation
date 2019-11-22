@@ -17,6 +17,8 @@ Powerful and low price sensors/actuators. Tailored solution leveraging existing 
 
 ![Landscape Architecture](https://github.com/Antori91/Home_Automation/blob/master/Architecture%20Overview.GIF)
 
+![Landscape Architecture2](https://github.com/Antori91/Home_Automation/blob/master/Architecture%20Overview - Topics.GIF)
+
 ## Forum topics about:
   - https://www.domoticz.com/forum/viewtopic.php?f=38&t=17032
   
