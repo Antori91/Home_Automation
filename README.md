@@ -32,22 +32,29 @@ Powerful and low price sensors/actuators. Tailored solution leveraging existing 
 
 ## The cookbook:
   - For full configuration, setup three servers. Synology (or Raspberry#0): main Domoticz server, Raspberry#1: backup Domoticz server and Raspberry#2: dedicated Alarm server. Lite configuration can include for example only the main server (neither cluster feature nor alarm server). Mandatory software:
-     - MQTT for the two Domoticz servers. On Raspbian Jessie:
+     - MQTT for the two Domoticz servers. For Raspbian Jessie or Buster:
      ```
          - wget http://repo.mosquitto.org/debian/mosquitto-repo.gpg.key
          - sudo apt-key add mosquitto-repo.gpg.key
          - cd /etc/apt/sources.list.d/
          - sudo wget http://repo.mosquitto.org/debian/mosquitto-jessie.list
+         or for Buster: sudo wget http://repo.mosquitto.org/debian/mosquitto-buster.list
          - sudo apt-get update
          - sudo apt-cache search mosquitto
          - sudo apt-get install mosquitto
      ```    
      - Node.js for all three (version greater than 6 for the two Raspberry#1 and #2) with packages mqtt (all), ssh2 (Raspberry#1), epoll and rpi-gpio (Raspberry#2):  
      ```
+         Jessie:
          - sudo apt-get update
          - sudo apt-get dist-upgrade
          - curl -sL https://deb.nodesource.com/setup_8.x | sudo -E bash -
          - sudo apt-get install -y nodejs
+         Buster:
+         - sudo apt update
+         - sudo apt install nodejs
+         - sudo apt install npm
+         Jessie or Buster:
          - npm install mqtt
          - npm install ssh2
          - npm install epoll
@@ -55,6 +62,7 @@ Powerful and low price sensors/actuators. Tailored solution leveraging existing 
      ```    
      - nginx for Raspberry#1 (and Raspberry#0 if main server is not Synology). To install latest nginx (1.10.3) and ssl version on Raspbian Jessie:
      ```
+         Jessie:
          - sudo apt-get update
          - sudo apt-get dist-upgrade
          - sudo bash -c 'cat << EOF >> /etc/apt/sources.list.d/nginx.list
@@ -66,7 +74,12 @@ Powerful and low price sensors/actuators. Tailored solution leveraging existing 
          - gpg -a --export 7638D0442B90D010 | sudo apt-key add -
          - sudo apt-get update     
          - sudo apt-get install -t jessie-backports nginx
-         - sudo apt-get install -t jessie-backports openssl  
+         - sudo apt-get install -t jessie-backports openssl 
+         Buster:
+         - sudo apt update                             
+         - sudo apt upgrade
+         - sudo apt install nginx
+         - systemctl status nginx 
      ```    
   - Install motionEye in the dedicated Alarm server. On Raspbian Jessie:
      ```
