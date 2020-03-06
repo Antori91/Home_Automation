@@ -4,7 +4,7 @@
 Author: Antori91 -- http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 DHIP/DVRIP routines -- https://github.com/mcw0/Tools/blob/master/Dahua-JSON-Debug-Console-v2.py
 Subject: Dahua VTH used as SecPanel to arm/disarm an external non Dahua Alarm Appliance
-V0.1  - February 2020 - ALPHA
+V0.1  - February 2020 - Initial release
 """
 
 import sys
@@ -65,15 +65,11 @@ def GetDZSecPanel(threadName, delay):
 def on_connect(mqttc, userdata, flags, rc):
     mqttc.connected_flag=True
     mqttc.subscribe(mySecretKeys[ "DZ_OUT_TOPIC" ])
-    _thread.start_new_thread(GetDZSecPanel, ("GetDZSecPanel", 30,) )
+    _thread.start_new_thread(GetDZSecPanel, ("GetDZSecPanel", 5,) )
 
 def on_message(mqttc, userdata, msg):
     #if verbose: print( "MQTT message received, topic: " + msg.topic + ", msg: " + str(msg.payload) )
     JSONmsg = json.loads(msg.payload)
-    #------------------
-    # New Alarm state 
-    # notified by MQTT 
-    #------------------
     if JSONmsg[ "idx" ] == mySecretKeys[ "idx_SecPanel" ]:
         log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_RX] {}".format(JSONmsg)) 
         if  ( JSONmsg[ "description" ] == mySecretKeys[ "SVR_ALARM_SID" ] or JSONmsg[ "description" ] == mySecretKeys[ "DZ_ALARM_CID" ] ) and ( AlarmToken[ "nvalue" ] != JSONmsg[ "nvalue" ] ):
@@ -81,8 +77,8 @@ def on_message(mqttc, userdata, msg):
                 P2Prc = Dahua.VTH_SetSecPanel( JSONmsg[ "nvalue" ] ) # Change the VTH Alarm Enable/profile state           
                 if P2Prc:    
                     AlarmToken[ "nvalue" ] = JSONmsg[ "nvalue" ]
-                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-Alarm] Changed by MQTT notification to: {}".format(AlarmProfile[ AlarmToken[ "nvalue" ] ]))
-                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-Alarm] {}".format(AlarmToken)) 
+                    log.info("[" + str(datetime.datetime.now()) + " SecPanel-VTH_BOX] been synchronized and updated by MQTT notification to: {}".format(AlarmProfile[ AlarmToken[ "nvalue" ] ]))
+                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-AlarmToken] is now: {}".format(AlarmToken)) 
                 else: log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] SetSecPanel Failed") 
             else: log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] VTH BOX SetSecPanel Not Available")              
         
@@ -237,10 +233,11 @@ class Dahua_Functions:
         self.clientType = ''                # WebGUI: We do not show up in logs or online users
 #       self.clientType = 'Web3.0'
 
-        self.AlarmEnable  = False           # Current VTH Alarm status returned: Armed or not
-        self.AlarmProfile = ''              # Current VTH Alarm profile returned: Outdoor, AtHome, Sleeping or Custom
-        self.AlarmAlert   = False           # Current VTH Alarm alert output: True or not
-        self.VTH_ON_LINE = -1               # Remote VTH BOX ON LINE status: -1=Unknown, 0=OK and 1=KO 
+        self.AlarmEnable   = False          # Remote VTH BOX Alarm status
+        self.AlarmProfile  = ''             # Remote VTH BOX profile
+        self.AlarmAlert    = False          # Remote VTH BOX alert output
+        self.AlarmConfig   = ''             # Remote VTH BOX Alarm profile channels configuration
+        self.VTH_ON_LINE   = -1             # Remote VTH BOX ON LINE status: -1=Unknown, 0=OK and 1=KO 
                                 
         self.event = threading.Event()
         self.socket_event = threading.Event()
@@ -302,15 +299,12 @@ class Dahua_Functions:
                 if verbose: log.info("P2P-2.Callback message received: {}".format(data))
                 data = ndjson.loads(data)
                 
-                #-------------------------
-                # New Alarm state entered 
-                # by VTH user interface
-                #-------------------------
                 if data[0].get('method') == "client.notifyConfigChange":
                     self.AlarmEnable = data[0]['params']['table']['AlarmEnable']
                     self.AlarmProfile = data[0]['params']['table']['CurrentProfile']
-                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-AlarmEnable] Changed by VTH user interface to: {}".format(self.AlarmEnable)) 
-                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-AlarmProfile] is: {}".format(self.AlarmProfile))
+                    log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnable] been changed by a VTH user to: {}".format(self.AlarmEnable)) 
+                    log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnableProfile] is: {}".format(self.AlarmProfile))
+                    log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmConfiguration] is: {}".format(self.AlarmConfig))
                     if not self.AlarmEnable:
                         AlarmToken['nvalue'] = 0
                     else: AlarmToken['nvalue'] = VTHAlarmProfile[ self.AlarmProfile ]
@@ -620,11 +614,16 @@ class Dahua_Functions:
         
         if verbose: log.info("VTH_GetSecPanel Service Call answer: {}".format(data))
         data = json.loads(data)
-        self.AlarmEnable = data['params']['table']['AlarmEnable']
+        self.AlarmEnable  = data['params']['table']['AlarmEnable']
         self.AlarmProfile = data['params']['table']['CurrentProfile']
+        self.AlarmConfig  = data['params']['table']['Profiles']
+        
         if not self.AlarmEnable: AlarmToken[ "nvalue" ] = 0
         else: AlarmToken[ "nvalue" ] = VTHAlarmProfile[ self.AlarmProfile ]
-        log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-Alarm] synchronized with VTH BOX to {}".format(AlarmToken))
+        log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnable] is: {}".format(self.AlarmEnable)) 
+        log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmProfile] is: {}".format(self.AlarmProfile))
+        log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmConfiguration] is: {}".format(self.AlarmConfig))
+        log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-AlarmToken] updated from VTH BOX to: {}".format(AlarmToken))
         self.VTH_ON_LINE = 0 # OK
         return True
 
@@ -652,47 +651,57 @@ class Dahua_Functions:
 
     def VTH_SetSecPanel(self, CVQ6081_Alarm):    
 
-        query_args = {
-				"method":"configManager.setConfig",
-				"params":{
-				    "table":{
-						"AlarmEnable": self.AlarmEnable,
-						"CurrentProfile": self.AlarmProfile,
-						},
-				    "name":"CommGlobal",
-				},
-				"session":self.SessionID,
-				"id":self.ID
-		}
-              
         if CVQ6081_Alarm == 0:      
-            query_args['params']['table']['AlarmEnable'] = "False"
+            self.AlarmEnable = False
         else: 
-            query_args['params']['table']['AlarmEnable']    = "True"
-            query_args['params']['table']['CurrentProfile'] = AlarmProfile[ CVQ6081_Alarm ]      
+            self.AlarmEnable = True            
+            self.AlarmProfile = AlarmProfile[ CVQ6081_Alarm ]   
 
-        log.info("[" + str(datetime.datetime.now()) + " VTH_BOX_Alarm] Synchronizing with SecPanel to: {}".format(query_args))        
-        self.VTH_ON_LINE = 0 # OK
-        return True 
+        query_args = {
+                "method":"configManager.setConfig",
+                "params":{
+                    "table":{
+                        "AlarmEnable"    : self.AlarmEnable,
+                        "CurrentProfile" : self.AlarmProfile,
+                        "ProfileEnable"  : True,
+                        "Profiles"       : self.AlarmConfig
+                    },
+                    "name":"CommGlobal",
+                },
+                "session":self.SessionID,
+                "id":self.ID
+        }
+                
+        log.info("[" + str(datetime.datetime.now()) + " VTH_BOX] Updating to: {}".format(query_args))    
+        if verbose: log.info("VTH_SetSecPanel Service Call request: {}".format(json.dumps(query_args)))
         
-        #data = self.P2P(json.dumps(query_args))
-        if verbose: log.info("VTH_SetSecPanel Service Call answer: {}".format(data))
-        if not data == None:
+        data = self.P2P(json.dumps(query_args))
+        
+        if data == None:
+            log.failure("[" + str(datetime.datetime.now()) + " VTH_BOX-P2P_FAILURE] SetSecPanel Failed - No answer" )
+            self.VTH_ON_LINE = 1 # KO
+            return False
+        elif len(data) == 1:            
+            if verbose: log.info("P2P-1. VTH_SetSecPanel Service Call answer: {}".format(data))
             data = json.loads(data)
             if data.get('result'):
-                if CVQ6081_Alarm == 0: self.AlarmEnable = "False"
-                else: self.AlarmEnable = "True"
-                self.AlarmProfile = AlarmProfile[ CVQ6081_Alarm ] 
                 self.VTH_ON_LINE = 0 # OK
-                return True
-            else:
-                log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] SetSecPanel Failed: {}".format(data)) 
+            else: 
                 self.VTH_ON_LINE = 1 # KO
                 return False
         else:
-            log.failure("[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] SetSecPanel Failed - No answer" )
-            self.VTH_ON_LINE = 1 # KO
-            return False
+            if verbose: log.info("P2P-2. VTH_SetSecPanel Service Call answer: {}".format(data))
+            data = ndjson.loads(data)               
+            if data[0].get('method') == "client.notifyConfigChange":
+                self.AlarmEnable  = data[0]['params']['table']['AlarmEnable']
+                self.AlarmProfile = data[0]['params']['table']['CurrentProfile']
+                self.AlarmConfig  = data[0]['params']['table']['Profiles']
+                log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnable] been changed remotely to: {}".format(self.AlarmEnable)) 
+                log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmProfile] is: {}".format(self.AlarmProfile))
+                log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmConfiguration] is: {}".format(self.AlarmConfig))
+                if not self.AlarmEnable:
+                    AlarmToken['nvalue'] = 0
+                else: AlarmToken['nvalue'] = VTHAlarmProfile[ self.AlarmProfile ]
             
         self.VTH_ON_LINE = 0 # OK
         return True
@@ -738,7 +747,7 @@ if __name__ == '__main__':
     "id" : "148702",
     "idx" : mySecretKeys[ "idx_SecPanel" ],          # SecPanel idx
     "name" : "Security Panel",
-    "nvalue" : 0,                                    # Alarm Enable/profile
+    "nvalue" : 1,                                    # Alarm Enable/profile
     "stype" : "Security Panel",
     "switchType" : "On/Off",
     "unit" : 0
@@ -767,7 +776,6 @@ if __name__ == '__main__':
     P2PerrorLogged = False  # P2P issue catched and already logged      
     Dahua = Dahua_Functions(mySecretKeys[ "VTH_SERVER_IP" ], mySecretKeys[ "VTH_PORT" ], Rssl, mySecretKeys[ "VTH_CREDENTIALS" ], mySecretKeys[ "VTH_PROTOCOL" ], False)          
 
-    ev = 1
     while True:                
         if not mqttc.connected_flag: 
             try:
@@ -781,8 +789,9 @@ if __name__ == '__main__':
                 MQTTerrorLogged = False
             except Exception as e:
                 if coldBootMQTT and not MQTTerrorLogged:
-                    log.failure( "[" + str(datetime.datetime.now()) + " VTH-MQTT_FAILURE] MQTT is DOWN - Trying again to connect every 5s" ) 
+                    log.failure( "[" + str(datetime.datetime.now()) + " VTH-MQTT_FAILURE] MQTT is DOWN - Trying again to connect every 5s" )
                     MQTTerrorLogged = True
+                    time.sleep(5)
                            
         if Dahua.VTH_ON_LINE != 0:  # We are not connected or we lost the VTH Box (keepAlive issue)
             if coldBootP2P:
@@ -806,16 +815,12 @@ if __name__ == '__main__':
                 if P2Prc:
                     log.success( "[" + str(datetime.datetime.now()) + " VTH-P2P_OK] VTH BOX back ON LINE" )
                     mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(VTH_Hello))
+                    mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(dzGetSECPANEL))
                     P2Prc = Dahua.VTH_GetSecPanel()   
                     if P2Prc: P2Prc = Dahua.VTH_GetSecPanelChange()
                     P2PerrorLogged  = False
                     
         mqttc.loop() # Process Mqtt stuff  
-        if MQTTerrorLogged or P2PerrorLogged: time.sleep(5)
-        ev += 1       
-        #print("ev=", ev)
-        if ev >= 2400: # 1 mn run - mqtt.loop() = 1s
-            break
     
     # We should never arrive here...        
     log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-Disconnecting]")       
