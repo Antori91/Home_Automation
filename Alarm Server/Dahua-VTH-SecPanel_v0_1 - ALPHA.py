@@ -65,7 +65,7 @@ def GetDZSecPanel(threadName, delay):
 def on_connect(mqttc, userdata, flags, rc):
     mqttc.connected_flag=True
     mqttc.subscribe(mySecretKeys[ "DZ_OUT_TOPIC" ])
-    _thread.start_new_thread(GetDZSecPanel, ("GetDZSecPanel", 5,) )
+    _thread.start_new_thread(GetDZSecPanel, ("GetDZSecPanel", 30,) )
 
 def on_message(mqttc, userdata, msg):
     #if verbose: print( "MQTT message received, topic: " + msg.topic + ", msg: " + str(msg.payload) )
@@ -786,6 +786,7 @@ if __name__ == '__main__':
                 else: 
                     mqttc.reconnect()
                     log.success( "[" + str(datetime.datetime.now()) + " VTH-MQTT_OK] MQTT back ON LINE" )
+                    time.sleep(0.3)
                 MQTTerrorLogged = False
             except Exception as e:
                 if coldBootMQTT and not MQTTerrorLogged:
