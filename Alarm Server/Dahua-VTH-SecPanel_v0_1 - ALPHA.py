@@ -4,7 +4,7 @@
 Author: Antori91 -- http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 DHIP/DVRIP routines -- https://github.com/mcw0/Tools/blob/master/Dahua-JSON-Debug-Console-v2.py
 Subject: Dahua VTH used as SecPanel to arm/disarm an external non Dahua Alarm Appliance
-V0.1  - February 2020 - Initial release
+V0.1  - February 2020 - ALPHA
 """
 
 import sys
