@@ -4,7 +4,7 @@
 Author: Antori91 -- http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 DHIP/DVRIP routines -- https://github.com/mcw0/Tools/blob/master/Dahua-JSON-Debug-Console-v2.py
 Subject: Dahua VTH used as SecPanel to arm/disarm an external non Dahua Alarm Appliance
-V0.1  - February 2020 - ALPHA
+V0.1 ALPHA - February/March 2020 - Don't use this code for production environment
 """
 
 import sys
@@ -59,7 +59,9 @@ dzGetSECPANEL = {
 
 def GetDZSecPanel(threadName, delay):
     time.sleep( delay )
+    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(VTH_SecPanel_Hello))
     mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(VTH_SecPanel_Hello))
+    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(dzGetSECPANEL))
     mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(dzGetSECPANEL))
 
 def on_connect(mqttc, userdata, flags, rc):
@@ -300,8 +302,9 @@ class Dahua_Functions:
                 data = ndjson.loads(data)
                 
                 if data[0].get('method') == "client.notifyConfigChange":
-                    self.AlarmEnable = data[0]['params']['table']['AlarmEnable']
+                    self.AlarmEnable  = data[0]['params']['table']['AlarmEnable']
                     self.AlarmProfile = data[0]['params']['table']['CurrentProfile']
+                    self.AlarmConfig  = data[0]['params']['table']['Profiles']
                     log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnable] been changed by a VTH user to: {}".format(self.AlarmEnable)) 
                     log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnableProfile] is: {}".format(self.AlarmProfile))
                     log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmConfiguration] is: {}".format(self.AlarmConfig))
@@ -347,9 +350,9 @@ class Dahua_Functions:
             return None
 
         self.ID += 1
-
+        
         self.lock.acquire()
-
+        
         DEBUG("SEND",header.decode('latin-1') + packet)
 
         try:
@@ -432,12 +435,15 @@ class Dahua_Functions:
 
     
     def Dahua_Login(self):
+        
+        if self.lock.locked(): self.lock.release()
         context.log_level = 'CRITICAL'            
         try:
             self.remote = remote(self.rhost, self.rport, ssl=self.SSL, timeout=5)
             context.log_level = 'INFO' 
         except (Exception, KeyboardInterrupt, SystemExit):
-            context.log_level = 'INFO'   
+            context.log_level = 'INFO'
+            self.VTH_ON_LINE = 1 # KO   
             return False
           
         if self.proto == 'dvrip':
@@ -519,7 +525,7 @@ class Dahua_Functions:
 
         keepAlive = data['params']['keepAliveInterval']
         log.info("VTH KEEPALIVE: {}".format(keepAlive))
-        _thread.start_new_thread(self.P2P_timeout,("P2P_timeout", keepAlive,))
+        if coldBootP2P: _thread.start_new_thread(self.P2P_timeout,("P2P_timeout", keepAlive,))
 
         if verbose: login.success("Success")
 
@@ -528,7 +534,7 @@ class Dahua_Functions:
 
     def Dahua_DVRIP_Login(self):
 
-        login = log.progress("Login")
+        if verbose: login = log.progress("Login")
 
         USER_NAME = self.credentials.split(':')[0]
         PASSWORD = self.credentials.split(':')[1]
@@ -540,14 +546,14 @@ class Dahua_Functions:
 
         data = self.P2P(None)
         if data == None or not len(data):
-            login.failure("Realm")
+            if verbose: login.failure("Realm")
             return False
 
         REALM = data.split('\r\n')[0].split(':')[1] if data.split('\r\n')[0].split(':')[0] == 'Realm' else False
         RANDOM = data.split('\r\n')[1].split(':')[1] if data.split('\r\n')[1].split(':')[0] == 'Random' else False
 
         if not RANDOM:
-            login.failure("Realm [random]")
+            if verbose: login.failure("Realm [random]")
             return False
 
         #
@@ -565,31 +571,31 @@ class Dahua_Functions:
 
 
         if self.ErrorCode[:4] == '0008':
-            login.success("Success")
+            if verbose: login.success("Success")
         elif self.ErrorCode[:4] == '0100':
-            login.failure("Authentication failed: {} tries left {}".format(int(self.AuthCode[2:4],16), "(BUG: SessionID = {})".format(self.SessionID) if self.SessionID else ''))
+            if verbose: login.failure("Authentication failed: {} tries left {}".format(int(self.AuthCode[2:4],16), "(BUG: SessionID = {})".format(self.SessionID) if self.SessionID else ''))
             return False
         elif self.ErrorCode[:4] == '0101':
-            login.failure("Username invalid")
+            if verbose: login.failure("Username invalid")
             return False
         elif self.ErrorCode[:4] == '0104':
-            login.failure("Account locked: {}".format(data))
+            if verbose: login.failure("Account locked: {}".format(data))
             return False
         elif self.ErrorCode[:4] == '0105':
-            login.failure("Undefined code: {}".format(self.ErrorCode[:4]))
+            if verbose: login.failure("Undefined code: {}".format(self.ErrorCode[:4]))
             return False
         elif self.ErrorCode[:4] == '0113':
-            login.failure("Not implemented: {}".format(self.ErrorCode[:4]))
+            if verbose: login.failure("Not implemented: {}".format(self.ErrorCode[:4]))
             return False
         elif self.ErrorCode[:4] == '0303':
-            login.failure("User already connected")
+            if verbose: login.failure("User already connected")
             return False
         else:
-            login.failure("Unknown ErrorCode: {}".format(self.ErrorCode[:4]))
+            if verbose: login.failure("Unknown ErrorCode: {}".format(self.ErrorCode[:4]))
             return False
 
         keepAlive = 30 # Seems to be stable
-        _thread.start_new_thread(self.P2P_timeout,("P2P_timeout", keepAlive,))
+        if coldBootP2P: _thread.start_new_thread(self.P2P_timeout,("P2P_timeout", keepAlive,))
 
         self.header =  p32(0xf6000000,endian='big') + '_LEN__ID_'.encode('latin-1') + p32(0x0) + '_LEN_'.encode('latin-1') + p32(0x0) + '_SessionHexID_'.encode('latin-1') + p32(0x0)
 
@@ -737,8 +743,8 @@ if __name__ == '__main__':
 
     INFO = "[" + str(datetime.datetime.now()) + " iot_Dahua_VTH_SecPanel V0.1 starting]"
     
-    AlarmProfile    = { 0: "AlarmDisable", 9: "Outdoor", 11: "AtHome" } # DZ SecPanel to corresponding VTH AlarmEnable/profile
-    VTHAlarmProfile = { "Outdoor": 9, "AtHome": 11, "Sleeping": 11, "Custom": 11 }                # VTH to corresponding DZ SecPanel for VTH AlarmEnable=True       
+    AlarmProfile    = { 0: "AlarmDisable", 9: "Outdoor", 11: "AtHome" }             # DZ SecPanel to corresponding VTH AlarmEnable/profile
+    VTHAlarmProfile = { "Outdoor": 9, "AtHome": 11, "Sleeping": 11, "Custom": 11 }  # VTH to corresponding DZ SecPanel for VTH AlarmEnable=True       
     AlarmToken = {  
     "Battery" : 255,
     "RSSI" : 12,
@@ -793,7 +799,7 @@ if __name__ == '__main__':
                     log.failure( "[" + str(datetime.datetime.now()) + " VTH-MQTT_FAILURE] MQTT is DOWN - Trying again to connect every 5s" )
                     MQTTerrorLogged = True
                     time.sleep(5)
-                           
+                             
         if Dahua.VTH_ON_LINE != 0:  # We are not connected or we lost the VTH Box (keepAlive issue)
             if coldBootP2P:
                 P2Prc = Dahua.Dahua_Login()
@@ -809,13 +815,20 @@ if __name__ == '__main__':
             else:
                 if not P2PerrorLogged:
                     log.failure( "[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] VTH BOX went OFF LINE" )
-                    mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(will_VTH))    
-                    Dahua.logout()
+                    mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(will_VTH))  
+                    time.sleep(0.3)  
+                    try:                        
+                        Dahua.logout()
+                        time.sleep(0.3)
+                    except Exception as e:
+                        time.sleep(0.3)
                     P2PerrorLogged = True
                 P2Prc = Dahua.Dahua_Login() 
                 if P2Prc:
                     log.success( "[" + str(datetime.datetime.now()) + " VTH-P2P_OK] VTH BOX back ON LINE" )
+                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(VTH_Hello))
                     mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(VTH_Hello))
+                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(dzGetSECPANEL))
                     mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(dzGetSECPANEL))
                     P2Prc = Dahua.VTH_GetSecPanel()   
                     if P2Prc: P2Prc = Dahua.VTH_GetSecPanelChange()
