@@ -10,9 +10,9 @@ V0.1b BETA - March 2020
 MQTT: Messages signed using MD5 hash.
 VTH:  No SSL available !
       VTH serial number verified at login.
-      Alarm Disarm requests coming from VTH accepted:
-      - if the login time is more than an hour old
-      - and if the notifyConfigChange SID and request number (self.id) are the same as the configManager.attach SID and request number saved values.
+      Reject Alarm Disarm requests:
+      - if VTH Box connection is recent
+      - or if notifyConfigChange SID and request number (self.id) not the same as the configManager.attach SID and request number saved values.
 """
 
 import sys, os
@@ -33,11 +33,12 @@ import paho.mqtt.client as mqtt # sudo pip3 install paho-mqtt
 from VTOH_DZ_MQTT_SecretKeys import *
 
 global debug
-debug = False
+debug   = False
 global verbose
 verbose = True
-SECURITY_BREACH = 255
-NORMAL_TERMINATION = 0
+SECURITY_BREACH     = 255
+NORMAL_TERMINATION  = 0
+DISARM_FREEZE_DELAY = 60  # Following VTH login, disarming allowed only after a delay of n seconds     
 
 # ---------------
 # MQTT FUNCTIONS
@@ -65,7 +66,7 @@ will_VTH = {
 
 dzGetSECPANEL = {
     "command" : "getdeviceinfo",
-    "idx"     : mySecretKeys[ "idx_SecPanel" ]
+    "idx"     : mySecretKeys[ "DZ_idx_SecPanel" ]
 }
 
 def GetDZSecPanel(threadName, delay):
@@ -94,7 +95,7 @@ def on_message(mqttc, userdata, msg):
             log.warn("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_RX] SECURITY WARNING - Message with invalid MD5 hash or datetime stamp received")
         if ( messageAuthenticity and AlarmToken[ "nvalue" ] != Nonce[ "nvalue" ] ):
             if not P2PerrorLogged:               
-                P2Prc = Dahua.VTH_SetSecPanel( JSONmsg[ "nvalue" ] ) # Change the VTH Alarm Enable/profile state           
+                P2Prc = Dahua.VTH_SetSecPanel( Nonce[ "nvalue" ] ) # Change the VTH Alarm Enable/profile state           
                 if P2Prc:
                     log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel and VTH_BOX] been synchronized and updated by MQTT notification to: {}".format(AlarmProfile[ AlarmToken[ "nvalue" ] ]))
                     log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-AlarmToken] is now: {}".format(AlarmToken)) 
@@ -328,7 +329,7 @@ class Dahua_Functions:
                         log.failure( "[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Request ID incorrect. EXITING." )
                         os._exit(SECURITY_BREACH)
                     tdiff = datetime.datetime.now() - self.LoginTime
-                    if ( tdiff.total_seconds()/3600 < 1 ) and not data[0]['params']['table']['AlarmEnable']:
+                    if ( (tdiff.total_seconds() / DISARM_FREEZE_DELAY) < 1 ) and not data[0]['params']['table']['AlarmEnable']:
                         log.warn("[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Recent Login to VTH - IGNORING DISARM request")
                         P2Prc = Dahua.VTH_SetSecPanel( AlarmToken['nvalue'] ) 
                         if P2Prc: log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-Alarm] been reset to previous state") 
@@ -882,7 +883,7 @@ if __name__ == '__main__':
                 P2Prc = Dahua.Dahua_Login()                 
                 if P2Prc:
                     if not Dahua.VTH_CheckSerialNumber():
-                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - Serial Number UNKNOWN. EXITING.." )
+                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - Serial Number UNKNOWN. EXITING." )
                         os._exit(SECURITY_BREACH)
                     log.success( "[" + str(datetime.datetime.now()) + " VTH-P2P_OK] CONNECTED to VTH BOX" )
                     P2Prc = Dahua.VTH_GetSecPanel()   
@@ -906,7 +907,7 @@ if __name__ == '__main__':
                 P2Prc = Dahua.Dahua_Login()  
                 if P2Prc:
                     if not Dahua.VTH_CheckSerialNumber():
-                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - Serial Number UNKNOWN. EXITING.." )
+                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - Serial Number UNKNOWN. EXITING." )
                         os._exit(SECURITY_BREACH)
                     log.success( "[" + str(datetime.datetime.now()) + " VTH-P2P_OK] VTH BOX back ON LINE" )
                     log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(VTH_Hello))
