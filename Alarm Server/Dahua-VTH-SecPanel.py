@@ -4,15 +4,15 @@
 Author: Antori91 -- http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 DHIP/DVRIP routines -- https://github.com/mcw0/Tools/blob/master/Dahua-JSON-Debug-Console-v2.py
 Subject: Dahua VTH used as SecPanel to arm/disarm an external non Dahua Alarm Appliance
-V0.1e BETA - March 2020
+V0.1f BETA - March 2020
 
 === Security concerns ===
 MQTT: Messages signed using MD5 hash.
-VTH:  No SSL available !
-      VTH serial number verified at login.
-      Reject Alarm Disarm requests:
-      - if VTH Box connection is recent
-      - or if notifyConfigChange SID and request number (self.id) not the same as the configManager.attach SID and request number saved values.
+VTH:  Service suspended and home automation alert sent if:
+        - Fake or unknown VTH connected
+        - Connection from any machine to VTH detected
+        - Alarm Disarm request received with incorrect notifyConfigChange SID or request number 
+      Alarm Disarm requests rejected if VTH connection is recent
 """
 
 import sys, os
@@ -36,6 +36,7 @@ global debug
 debug   = False
 global verbose
 verbose = False
+
 SECURITY_BREACH     = 255
 NORMAL_TERMINATION  = 0
 DISARM_FREEZE_DELAY = 60  # Following VTH login, disarming allowed only after a delay of n seconds     
@@ -53,6 +54,11 @@ will_VTH_SecPanel = {
     "command" : "addlogmessage",
     "message" : "VTH SECPANEL went OFF LINE"
 }
+
+SECURITY_ALERT_VTH_SecPanel = {
+    "command" : "addlogmessage",
+    "message" : "VTH SECPANEL SECURITY BREACH - Service suspended"
+}
     
 VTH_Hello = {
     "command" : "addlogmessage",
@@ -68,6 +74,14 @@ dzGetSECPANEL = {
     "command" : "getdeviceinfo",
     "idx"     : mySecretKeys[ "DZ_idx_SecPanel" ]
 }
+
+dzAlarmRAISE_ALARM_FAILURE = {
+    "command"   : "switchlight",
+    "idx"       : mySecretKeys[ "idx_AlarmFailureFlag" ],
+    "switchcmd" : "On",
+    "passcode"  : mySecretKeys[ "ProtectedDevicePassword" ]
+}
+
 
 def GetDZSecPanel(threadName, delay):
     time.sleep( delay )
@@ -247,8 +261,9 @@ class Dahua_Functions:
 
         # Internal sharing
         self.ID = 0                         # Our Request / Response ID that must be in all requests and initated by us
-        self.SessionID = 0                  # Session ID will be returned after successful login
-        self.LoginTime = '(null)'           # Login datetime 
+        self.SessionID  = 0                 # Session ID will be returned after successful login
+        self.LoginTime  = '(null)'          # Login datetime 
+        self.VTHCxion   = '(null)'          # Connection to VTH surveillance stamp         
         self.OBJECT = 0                     # Object ID will be returned after called <service>.factory.instance
         self.SID = 0                        # SID will be returned after we called <service>.attach with 'Object ID'
         self.SID_ID = 0                     # ID used when we called <service>.attach with 'Object ID'
@@ -261,6 +276,7 @@ class Dahua_Functions:
         self.AlarmAlert    = False          # Remote VTH BOX alert output
         self.AlarmConfig   = ''             # Remote VTH BOX Alarm profile channels configuration
         self.VTH_ON_LINE   = -1             # Remote VTH BOX ON LINE status: -1 = Unknown, 0 = OK and >=1 (P2P error com line#)= KO 
+        self.SERVICE_SUSPENDED = False      # If any security issue...
                                 
         self.event = threading.Event()
         self.socket_event = threading.Event()
@@ -323,38 +339,42 @@ class Dahua_Functions:
                 data = ndjson.loads(data)
                 
                 if data[0].get('method') == "client.notifyConfigChange":
-                    if data[0]['params']['SID'] != self.SID:
-                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Session ID incorrect. EXITING." )
-                        os._exit(SECURITY_BREACH)
-                    if data[0]['id'] != self.SID_ID:
-                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Request ID incorrect. EXITING." )
-                        os._exit(SECURITY_BREACH)
-                    tdiff = datetime.datetime.now() - self.LoginTime
-                    if ( (tdiff.total_seconds() / DISARM_FREEZE_DELAY) < 1 ) and not data[0]['params']['table']['AlarmEnable']:
-                        log.warn("[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Recent Login to VTH - IGNORING DISARM request")
-                        P2Prc = Dahua.VTH_SetSecPanel( AlarmToken['nvalue'] ) 
-                        if P2Prc: log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-Alarm] been reset to previous state") 
-                        else: log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] SetSecPanel Failed")           
-                    else:  
-                        self.AlarmEnable  = data[0]['params']['table']['AlarmEnable']
-                        self.AlarmProfile = data[0]['params']['table']['CurrentProfile']
-                        self.AlarmConfig  = data[0]['params']['table']['Profiles']
-                        log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnable] been changed by a VTH user to: {}".format(self.AlarmEnable)) 
-                        log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnableProfile] is: {}".format(self.AlarmProfile))
-                        if verbose: log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmConfiguration] is: {}".format(self.AlarmConfig))
-                        if not self.AlarmEnable:
-                            AlarmToken['nvalue'] = 0
-                        else: AlarmToken['nvalue'] = VTHAlarmProfile[ self.AlarmProfile ]
-                        Nonce = {  
-                        "stationID" : mySecretKeys[ "VTH_ALARM_CID" ],
-                        "datetime"  : str(datetime.datetime.now()), 
-                        "nvalue"    : AlarmToken['nvalue']
-                        }
-                        AlarmToken['description'] = Nonce
-                        AlarmToken['RSSI']        = hashlib.md5( (json.dumps(AlarmToken['description'],separators=(',', ':')) + mySecretKeys[ "SecPanel_Seccode" ]).encode('latin-1') ).hexdigest()
-                        self.VTH_ON_LINE = 0 # OK
-                        log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(AlarmToken))
-                        mqttc.publish(mySecretKeys[ "DZ_OUT_TOPIC" ], json.dumps(AlarmToken)) #Inform Alarm server and other Alarm clients 
+                    if self.VTHCxion != hashlib.md5(open('/home/pi/iot_domoticz/Dahua-VTH-BOX-cxion.log','rb').read()).hexdigest():
+                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Unknown connection to VTH happened. SERVICE SUSPENDED." )
+                        self.SERVICE_SUSPENDED = True           
+                    elif data[0]['params']['SID'] != self.SID:
+                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Session ID incorrect. SERVICE SUSPENDED." )
+                        self.SERVICE_SUSPENDED = True
+                    elif data[0]['id'] != self.SID_ID:
+                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Request ID incorrect. SERVICE SUSPENDED." )
+                        self.SERVICE_SUSPENDED = True
+                    else:
+                        tdiff = datetime.datetime.now() - self.LoginTime
+                        if ( (tdiff.total_seconds() / DISARM_FREEZE_DELAY) < 1 ) and not data[0]['params']['table']['AlarmEnable']:
+                            log.warn("[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Recent Login to VTH - IGNORING DISARM request")
+                            P2Prc = Dahua.VTH_SetSecPanel( AlarmToken['nvalue'] ) 
+                            if P2Prc: log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-Alarm] been reset to previous state") 
+                            else: log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] SetSecPanel Failed")           
+                        else:  
+                            self.AlarmEnable  = data[0]['params']['table']['AlarmEnable']
+                            self.AlarmProfile = data[0]['params']['table']['CurrentProfile']
+                            self.AlarmConfig  = data[0]['params']['table']['Profiles']
+                            log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnable] been changed by a VTH user to: {}".format(self.AlarmEnable)) 
+                            log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnableProfile] is: {}".format(self.AlarmProfile))
+                            if verbose: log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmConfiguration] is: {}".format(self.AlarmConfig))
+                            if not self.AlarmEnable:
+                                AlarmToken['nvalue'] = 0
+                            else: AlarmToken['nvalue'] = VTHAlarmProfile[ self.AlarmProfile ]
+                            Nonce = {  
+                            "stationID" : mySecretKeys[ "VTH_ALARM_CID" ],
+                            "datetime"  : str(datetime.datetime.now()), 
+                            "nvalue"    : AlarmToken['nvalue']
+                            }
+                            AlarmToken['description'] = Nonce
+                            AlarmToken['RSSI']        = hashlib.md5( (json.dumps(AlarmToken['description'],separators=(',', ':')) + mySecretKeys[ "SecPanel_Seccode" ]).encode('latin-1') ).hexdigest()
+                            self.VTH_ON_LINE = 0 # OK
+                            log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(AlarmToken))
+                            mqttc.publish(mySecretKeys[ "DZ_OUT_TOPIC" ], json.dumps(AlarmToken)) #Inform Alarm server and other Alarm clients 
                 
                 for NUM in range(0,len(data)):
                     if data[NUM].get('result'):
@@ -511,6 +531,7 @@ class Dahua_Functions:
             return False
         
         self.LoginTime   = datetime.datetime.now()
+        self.VTHCxion    = hashlib.md5(open('/home/pi/iot_domoticz/Dahua-VTH-BOX-cxion.log','rb').read()).hexdigest()
         self.VTH_ON_LINE = 0 # OK
         return True   
             
@@ -790,21 +811,31 @@ class Dahua_Functions:
                 if verbose: log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-SerialNumber] {}".format(data))
                 if mySecretKeys[ "VTH_SERIAL_NUMBER" ] != data['params']['sn']:
                     self.VTH_ON_LINE = self.P2P_traceError() # KO
+                    log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - WRONG Serial Number.  SERVICE SUSPENDED." )
+                    self.SERVICE_SUSPENDED = True   
                     return False
                 self.VTH_ON_LINE = 0 # OK
                 return True
             else:
                 log.failure("[" + str(datetime.datetime.now()) + " VTH_BOX-SerialNumber-P2P_FAILURE] CheckSerialNumber Failed - Error code: {}".format(data)) 
                 self.VTH_ON_LINE = self.P2P_traceError() # KO
+                log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - Serial Number UNKNOWN.  SERVICE SUSPENDED." )
+                self.SERVICE_SUSPENDED = True   
                 return False
         else:
             log.failure("[" + str(datetime.datetime.now()) + " VTH_BOX-SerialNumber-P2P_FAILURE] CheckSerialNumber Failed - No answer" )
             self.VTH_ON_LINE = self.P2P_traceError() # KO
+            log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - Serial Number UNKNOWN.  SERVICE SUSPENDED." )
+            self.SERVICE_SUSPENDED = True   
             return False        
 
                 
     def logout(self):
-
+        
+        if self.VTHCxion != hashlib.md5(open('/home/pi/iot_domoticz/Dahua-VTH-BOX-cxion.log','rb').read()).hexdigest():
+            log.failure( "[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Unknown connection to VTH happened. SERVICE SUSPENDED." )
+            self.SERVICE_SUSPENDED = True
+        
         query_args = {
             "method":"global.logout",
             "params":"null",
@@ -894,9 +925,7 @@ if __name__ == '__main__':
             if coldBootP2P:
                 P2Prc = Dahua.Dahua_Login()                 
                 if P2Prc:
-                    if not Dahua.VTH_CheckSerialNumber():
-                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - Serial Number UNKNOWN. EXITING." )
-                        os._exit(SECURITY_BREACH)
+                    if not Dahua.VTH_CheckSerialNumber(): break
                     log.success( "[" + str(datetime.datetime.now()) + " VTH-P2P_OK] CONNECTED to VTH BOX" )
                     P2Prc = Dahua.VTH_GetSecPanel()   
                     if P2Prc: P2Prc = Dahua.VTH_GetSecPanelChange()
@@ -918,9 +947,7 @@ if __name__ == '__main__':
                     P2PerrorLogged = True
                 P2Prc = Dahua.Dahua_Login()  
                 if P2Prc:
-                    if not Dahua.VTH_CheckSerialNumber():
-                        log.failure( "[" + str(datetime.datetime.now()) + " VTH_SERIAL_NUMBER] SECURITY WARNING - Serial Number UNKNOWN. EXITING." )
-                        os._exit(SECURITY_BREACH)
+                    if not Dahua.VTH_CheckSerialNumber(): break 
                     log.success( "[" + str(datetime.datetime.now()) + " VTH-P2P_OK] VTH BOX back ON LINE" )
                     log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(VTH_Hello))
                     mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(VTH_Hello))
@@ -930,10 +957,17 @@ if __name__ == '__main__':
                     if P2Prc: P2Prc = Dahua.VTH_GetSecPanelChange()
                     P2PerrorLogged  = False
                     
-        mqttc.loop() # Process Mqtt stuff  
-    
-    # We should never arrive here...        
-    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-Disconnecting]")       
-    Dahua.logout()
+        mqttc.loop() # Process Mqtt stuff          
+        if Dahua.SERVICE_SUSPENDED: break
+   
+    # We should never arrive here...unless Security issue
+    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-Disconnecting]")   
+    if Dahua.SERVICE_SUSPENDED: 
+        mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(dzAlarmRAISE_ALARM_FAILURE))        
+        mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(SECURITY_ALERT_VTH_SecPanel))
+        mqttc.loop()         
+    else: Dahua.logout()
     mqttc.disconnect()
+    while Dahua.SERVICE_SUSPENDED:    # to avoid program respawn
+         time.sleep( 3600 )    
     sys.exit(NORMAL_TERMINATION)
