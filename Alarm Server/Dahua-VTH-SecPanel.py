@@ -4,14 +4,15 @@
 Author: Antori91 -- http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 DHIP/DVRIP routines -- https://github.com/mcw0/Tools/blob/master/Dahua-JSON-Debug-Console-v2.py
 Subject: Dahua VTH used as SecPanel to arm/disarm an external non Dahua Alarm Appliance
-V0.1f BETA - March 2020
+V0.1g BETA - March 2020
 
 === Security concerns ===
 MQTT: Messages signed using MD5 hash.
 VTH:  Service suspended and home automation alert sent if:
         - Fake or unknown VTH connected
         - Connection from any machine to VTH detected
-        - Alarm Disarm request received with incorrect notifyConfigChange SID or request number 
+        - Alarm request received having incorrect notifyConfigChange SID or request number
+        - Alarm request received having notifyConfigChange values not matching actual VTH state 
       Alarm Disarm requests rejected if VTH connection is recent
 """
 
@@ -352,29 +353,33 @@ class Dahua_Functions:
                         tdiff = datetime.datetime.now() - self.LoginTime
                         if ( (tdiff.total_seconds() / DISARM_FREEZE_DELAY) < 1 ) and not data[0]['params']['table']['AlarmEnable']:
                             log.warn("[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Recent Login to VTH - IGNORING DISARM request")
-                            P2Prc = Dahua.VTH_SetSecPanel( AlarmToken['nvalue'] ) 
-                            if P2Prc: log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-Alarm] been reset to previous state") 
-                            else: log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] SetSecPanel Failed")           
+                            if self.VTH_SetSecPanel( AlarmToken['nvalue'] ): log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-Alarm] been reset to previous state") 
+                            else: 
+                                log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] SetSecPanel Failed. SERVICE SUSPENDED.")
+                                self.SERVICE_SUSPENDED = True             
                         else:  
-                            self.AlarmEnable  = data[0]['params']['table']['AlarmEnable']
-                            self.AlarmProfile = data[0]['params']['table']['CurrentProfile']
-                            self.AlarmConfig  = data[0]['params']['table']['Profiles']
-                            log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnable] been changed by a VTH user to: {}".format(self.AlarmEnable)) 
-                            log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmEnableProfile] is: {}".format(self.AlarmProfile))
-                            if verbose: log.info("[" + str(datetime.datetime.now()) + " VTH_BOX-AlarmConfiguration] is: {}".format(self.AlarmConfig))
-                            if not self.AlarmEnable:
-                                AlarmToken['nvalue'] = 0
-                            else: AlarmToken['nvalue'] = VTHAlarmProfile[ self.AlarmProfile ]
-                            Nonce = {  
-                            "stationID" : mySecretKeys[ "VTH_ALARM_CID" ],
-                            "datetime"  : str(datetime.datetime.now()), 
-                            "nvalue"    : AlarmToken['nvalue']
-                            }
-                            AlarmToken['description'] = Nonce
-                            AlarmToken['RSSI']        = hashlib.md5( (json.dumps(AlarmToken['description'],separators=(',', ':')) + mySecretKeys[ "SecPanel_Seccode" ]).encode('latin-1') ).hexdigest()
-                            self.VTH_ON_LINE = 0 # OK
-                            log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(AlarmToken))
-                            mqttc.publish(mySecretKeys[ "DZ_OUT_TOPIC" ], json.dumps(AlarmToken)) #Inform Alarm server and other Alarm clients 
+                            _AlarmEnable  = data[0]['params']['table']['AlarmEnable']
+                            _AlarmProfile = data[0]['params']['table']['CurrentProfile']
+                            _AlarmConfig  = data[0]['params']['table']['Profiles']
+                            if self.VTH_GetSecPanel(): 
+                                if _AlarmEnable == self.AlarmEnable and _AlarmProfile == self.AlarmProfile and _AlarmConfig == self.AlarmConfig:
+                                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel and VTH_BOX] been changed following VTH user operation. AlarmEnable is now: {}".format(self.AlarmEnable))  
+                                    Nonce = {  
+                                    "stationID" : mySecretKeys[ "VTH_ALARM_CID" ],
+                                    "datetime"  : str(datetime.datetime.now()), 
+                                    "nvalue"    : AlarmToken['nvalue']
+                                    }
+                                    AlarmToken['description'] = Nonce
+                                    AlarmToken['RSSI']        = hashlib.md5( (json.dumps(AlarmToken['description'],separators=(',', ':')) + mySecretKeys[ "SecPanel_Seccode" ]).encode('latin-1') ).hexdigest()
+                                    self.VTH_ON_LINE = 0 # OK
+                                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_TX] {}".format(AlarmToken))
+                                    mqttc.publish(mySecretKeys[ "DZ_OUT_TOPIC" ], json.dumps(AlarmToken)) #Inform Alarm server and other Alarm clients
+                                else:   
+                                    log.failure( "[" + str(datetime.datetime.now()) + " VTH_BOX-Notification] SECURITY WARNING - Notification doesn't match VTH state. SERVICE SUSPENDED." )
+                                    self.SERVICE_SUSPENDED = True    
+                            else:
+                                log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] GetSecPanel Failed. SERVICE SUSPENDED.")
+                                self.SERVICE_SUSPENDED = True   
                 
                 for NUM in range(0,len(data)):
                     if data[NUM].get('result'):
@@ -706,7 +711,7 @@ class Dahua_Functions:
         log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-AlarmToken] updated from VTH BOX to: {}".format(AlarmToken))
         self.VTH_ON_LINE = 0 # OK
         return True
-
+ 
 
     def VTH_GetSecPanelChange(self):
 
