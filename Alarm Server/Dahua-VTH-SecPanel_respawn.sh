@@ -1,5 +1,5 @@
 #!/bin/sh
-# "./Dahua-VTH-SecPanel_respawn &" to run this script
+# "./Dahua-VTH-SecPanel_respawn.sh &" to run this script
 cd /home/pi/iot_domoticz
 # Next line, dst 192.168.X.XXX has to be updated to your VTH IP address
 sudo tcpdump --number -n -l 'tcp[tcpflags] & tcp-syn != 0 and dst 192.168.X.XXX' > /home/pi/iot_domoticz/Dahua-VTH-BOX-cxion.log &
