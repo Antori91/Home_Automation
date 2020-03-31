@@ -4,10 +4,11 @@
 Author: Antori91 -- http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 DHIP/DVRIP routines -- https://github.com/mcw0/Tools/blob/master/Dahua-JSON-Debug-Console-v2.py
 Subject: Dahua VTH used as SecPanel to arm/disarm an external non Dahua Alarm Appliance
+V0.11 - April 2020 - Initial release 
 V0.1g BETA - March 2020
 
 === Security concerns ===
-MQTT: Messages signed using MD5 hash.
+MQTT: Alarm request Messages signed using MD5 hash.
 VTH:  Service suspended and home automation alert sent if:
         - Fake or unknown VTH connected
         - Connection from any machine to VTH detected
@@ -114,8 +115,7 @@ def on_message(mqttc, userdata, msg):
         if ( messageAuthenticity and AlarmToken[ "nvalue" ] != Nonce[ "nvalue" ] ):
             if not P2PerrorLogged:               
                 P2Prc = Dahua.VTH_SetSecPanel( Nonce[ "nvalue" ] ) # Change the VTH Alarm Enable/profile state           
-                if P2Prc:
-                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel and VTH_BOX] been synchronized by MQTT. AlarmToken is now: {}".format(AlarmToken)) 
+                if P2Prc: log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel and VTH_BOX] FOLLOWING MQTT MESSAGE, SUCCESSFULL ALARM STATE MODIFICATION. VTH AlarmEnable is now: {}".format(Dahua.AlarmEnable)) 
                 else: log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] SetSecPanel Failed") 
             else: log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] VTH BOX SetSecPanel Not Available")              
         
@@ -363,7 +363,7 @@ class Dahua_Functions:
                             _AlarmConfig  = data[0]['params']['table']['Profiles']
                             if self.VTH_GetSecPanel(): 
                                 if _AlarmEnable == self.AlarmEnable and _AlarmProfile == self.AlarmProfile and _AlarmConfig == self.AlarmConfig:
-                                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel and VTH_BOX] been changed following VTH user operation. AlarmEnable is now: {}".format(self.AlarmEnable))  
+                                    log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel and VTH_BOX] FOLLOWING VTH USER OPERATION, SUCCESSFULL ALARM STATE MODIFICATION. VTH AlarmEnable is now: {}".format(self.AlarmEnable))  
                                     Nonce = {  
                                     "stationID" : mySecretKeys[ "VTH_ALARM_CID" ],
                                     "datetime"  : str(datetime.datetime.now()), 
@@ -867,7 +867,7 @@ class Dahua_Functions:
 if __name__ == '__main__':
 
 
-    INFO = "[" + str(datetime.datetime.now()) + " iot_Dahua_VTH_SecPanel V0.1 starting]"
+    INFO = "[" + str(datetime.datetime.now()) + " iot_Dahua_VTH_SecPanel V0.11 starting]"
     
     AlarmProfile    = { 0: "AlarmDisable", 9: "Outdoor", 11: "AtHome" }             # DZ SecPanel to corresponding VTH AlarmEnable/profile
     VTHAlarmProfile = { "Outdoor": 9, "AtHome": 11, "Sleeping": 11, "Custom": 11 }  # VTH to corresponding DZ SecPanel for VTH AlarmEnable=True       
