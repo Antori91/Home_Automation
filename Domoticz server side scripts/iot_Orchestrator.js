@@ -3,6 +3,8 @@
 //        - Manage Heaters and Heating Zones (Scheduled TOP Start/Stop),
 //        - Compute and log heaters characteristics,
 //        - Monitor ESP8266-ACS712/Heaters, ESP8266/Lighting and Raspberry/Alarm servers *****
+// V1.0  - March 2020
+           // Monitor Dahua VTH box and secpanel. If failure, raise "Panne Alarme" - idxAlarmFailureFlag Dz device
 // V0.95 - April 2019
            // Monitor the new Fire Alarm server. If failure, raise "Panne Alarme" - idxAlarmFailureFlag Dz device
 // V0.91 - February 2019
@@ -35,20 +37,27 @@
 const VERBOSE = false; // Detailed logging or not 
 if( process.argv[ 2 ] === 'RASPBERRY')                                                         // Unless otherwise specified 
       MyJSecretKeys  = require('/home/pi/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');            
-else  MyJSecretKeys  = require('/volume1/@appstore/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');  // execution hardware assumed to be Synology  
+else  MyJSecretKeys  = require('/volume1/@appstore/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');  // execution hardware assumed to be Synology
+const crypto         = require('crypto');  
 
 // ** Monitoring attributes **
-const HEATER_OFFLINE   = "Heater went Offline";
-const LIGHTING_ONLINE  = "Lighting Online";
-const LIGHTING_OFFLINE = "Lighting went Offline";
-const ALARM_ONLINE     = "ALARM Server ON LINE";
-const ALARM_OFFLINE    = "ALARM Server went OFF LINE";
-const FIREALARM_ONLINE = "FIREalarm Online";
-const FIREALARM_OFFLINE= "FIREalarm went Offline";
+const HEATER_OFFLINE       = "Heater went Offline";
+const LIGHTING_ONLINE      = "Lighting Online";
+const LIGHTING_OFFLINE     = "Lighting went Offline";
+const ALARM_ONLINE         = "ALARM Server ON LINE";
+const ALARM_OFFLINE        = "ALARM Server went OFF LINE";
+const FIREALARM_ONLINE     = "FIREalarm Online";
+const FIREALARM_OFFLINE    = "FIREalarm went Offline";
+const VTH_SECPANEL_ONLINE  = "VTH SECPANEL ON LINE"
+const VTH_SECPANEL_OFFLINE = "VTH SECPANEL went OFF LINE"
+const VTH_BOX_ONLINE       = "VTH BOX ON LINE"
+const VTH_BOX_OFFLINE      = "VTH BOX went OFF LINE"
 
 var   myLighting       = 0;  // Lighting status,      0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
 var   myAlarmSvr       = 0;  // Alarm server status,  0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
 var   myFireAlarmSvr   = 0;  // Fire Alarm server status,  0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
+var   myVTHsecpanel    = 0;  // VTH Secpanel, 0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
+var   myVTHbox         = 0;  // VTH Box, 0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
 const HeatingTimer     = 60; // Send heating command to Heaters and Log latest heaters characteristics computed every n minutes
 
 // ** Domoticz Parameters and communication functions **
@@ -59,6 +68,13 @@ port: MyJSecretKeys.DZ_PORT,
 path: '/'
 };
 
+const JSECPANEL_DISARM           = 0;  // JSON SecPanel AlarmEnable
+const JSECPANEL_ARM_HOME         = 1;
+const JSECPANEL_ARM_AWAY         = 2;
+const MSECPANEL_DISARM           = 0;  // MQTT SecPanel AlarmEnable
+const MSECPANEL_ARM_HOME         = 11;
+const MSECPANEL_ARM_AWAY         = 9;
+              
 const idxFailureFlag            = MyJSecretKeys.idxClusterFailureFlag;      // Dz "Panne Domotique" device
 const idxAlarmFailureFlag       = MyJSecretKeys.idx_AlarmFailureFlag;       // Dz "Panne Alarme" Device 
 const idxUnactiveHeatersDisplay = MyJSecretKeys.idx_UnactiveHeatersDisplay; // Dz "Zones Chauffage Actives" Device
@@ -67,7 +83,7 @@ const idxUnactivateHeaters      = MyJSecretKeys.idx_UnactivateHeaters;      // D
 const Var_UnactiveHeaters       = MyJSecretKeys.Var_UnactiveHeaters;        // Dz user variable# to store the heaters heating state command
 const Varname_UnactiveHeaters   = MyJSecretKeys.Varname_UnactiveHeaters;    // Dz user variable name to store the heaters heating state command
 
-var DomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {    // Function to talk to DomoticZ. Do Callback if any 
+var DomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {     // Function to talk to DomoticZ. Do Callback if any 
    var savedURL=JSON.stringify(JsonUrl);
    if( VERBOSE ) console.log("\n** DomoticZ URL request=" + savedURL );
    httpDomoticz.get(JsonUrl, function(resp){
@@ -80,6 +96,40 @@ var DomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {    // Fu
          if( callBack ) callBack( e, null, objectToCompute );
    });
 };   // function DomoticzJsonTalk( JsonUrl ) 
+
+var signedAlarmRequest = function( error, SecPanel, alarmToken ) {
+  if( error ) return;
+  if( (SecPanel.secstatus === JSECPANEL_DISARM   && alarmToken.nvalue != MSECPANEL_DISARM)     || 
+      (SecPanel.secstatus === JSECPANEL_ARM_HOME && alarmToken.nvalue != MSECPANEL_ARM_HOME)   || 
+      (SecPanel.secstatus === JSECPANEL_ARM_AWAY && alarmToken.nvalue != MSECPANEL_ARM_AWAY) ) {
+          console.log("\n*** " + new Date() + " SECURITY WARNING - INCORRECT Secpanel state in message received" );       
+  } else {     
+          var cdatetime     = new Date();
+          cdatetime.setHours( cdatetime.getHours() - cdatetime.getTimezoneOffset()/60 );
+          var Nonce =  {  
+               "stationID" : MyJSecretKeys.DZ_ALARM_CID,
+               "datetime"  : cdatetime.toISOString().replace(/Z/, '000').replace(/T/, ' '),
+               "nvalue"    : alarmToken.nvalue
+          };
+          alarmToken.description = Nonce;
+          alarmToken.idx         = MyJSecretKeys.idx_SecPanel;
+          alarmToken.RSSI        = crypto.createHash('md5').update(JSON.stringify(alarmToken.description)+MyJSecretKeys.SecPanel_Seccode).digest('hex');
+          console.log("\n*** " + new Date() + " MQTT MD5 signed message about Alarm Request sent: " + JSON.stringify(alarmToken) );
+          client.publish( 'domoticz/out', JSON.stringify(alarmToken) ); // Inform Alarm server and other Alarm clients 
+  } // if( data.secstatus === objectToCompute ) {
+}; // var signedAlarmRequest = fu
+
+var updateSecPanel = function( error, SecPanel, alarmToken ) {
+  if( error ) return;
+  if( (SecPanel.secstatus === JSECPANEL_DISARM   && alarmToken.nvalue != MSECPANEL_DISARM)     || 
+      (SecPanel.secstatus === JSECPANEL_ARM_HOME && alarmToken.nvalue != MSECPANEL_ARM_HOME)   || 
+      (SecPanel.secstatus === JSECPANEL_ARM_AWAY && alarmToken.nvalue != MSECPANEL_ARM_AWAY) ) {
+          if( alarmToken.nvalue === MSECPANEL_ARM_HOME ) JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_HOME + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
+          if( alarmToken.nvalue === MSECPANEL_ARM_AWAY ) JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_AWAY + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
+          if( alarmToken.nvalue === MSECPANEL_DISARM )   JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_DISARM   + '&seccode=' + MyJSecretKeys.SecPanel_Seccode;
+          DomoticzJsonTalk( JSON_API );        
+  } // if( (SecPanel.secstatus === JSECPANEL_DISARM   && alarmT
+}; // var updateSecPanel = funct
 
 var RaisefailureFlag = function( error, data, objectToCompute ) {
   if( error ) return;
@@ -142,8 +192,8 @@ var   myHeaters        = [ new heater("3A73F0", 28, 1426, "ENTREE", "10", "40" )
                            new heater("9497B1", -1, 500,  "SDB", "80", "100"),        new heater("65DEF6", 38, 1442, "PARENTAL", "90", "100"),   new heater("412A10", 34, 1603, "ECS", "-1", "-1") ];
                            
 // *************** MAIN START HERE ***************
-if( process.argv[ 2 ] === 'RASPBERRY') console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v0.95 starting - Server platform set to RASPBERRY ***\n");
-else console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v0.95 starting - Server platform set to SYNOLOGY ***\n");
+if( process.argv[ 2 ] === 'RASPBERRY') console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v1.0 starting - Server platform set to RASPBERRY ***\n");
+else console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v1.0 starting - Server platform set to SYNOLOGY ***\n");
 
 // Get from Dz the latest heating command saved and display it 
 JSON_API.path = '/json.htm?type=command&param=getuservariable&idx=' + Var_UnactiveHeaters;
@@ -196,6 +246,18 @@ setInterval(function(){
             DomoticzJsonTalk( JSON_API, RaisefailureFlag, idxAlarmFailureFlag );
             myFireAlarmSvr = 3; 
          }  // if( myFireAlarmSvr === 2 ) {     
+    if( myVTHsecpanel === 1 ) myVTHsecpanel = 2;
+    else if( myVTHsecpanel === 2 ) {
+            JSON_API.path = '/json.htm?type=devices&rid=' + idxAlarmFailureFlag;
+            DomoticzJsonTalk( JSON_API, RaisefailureFlag, idxAlarmFailureFlag );
+            myVTHsecpanel = 3; 
+         }  // if( myVTHsecpanel === 2 ) {  
+    if( myVTHbox === 1 ) myVTHbox = 2;
+    else if( myVTHbox === 2 ) {
+            JSON_API.path = '/json.htm?type=devices&rid=' + idxAlarmFailureFlag;
+            DomoticzJsonTalk( JSON_API, RaisefailureFlag, idxAlarmFailureFlag );
+            myVTHbox = 3; 
+         }  // if( myVTHbox === 2 ) {  
     myHeaters.forEach(function( value ) {
        if( value.DeviceFault === 1 ) value.DeviceFault = 2;
        else if( value.DeviceFault === 2 ) {
@@ -221,8 +283,27 @@ client.on('message', function (topic, message) {
      var hzoneModified = false;  // If at least One Heating Zone was changed at DomoticZ side (i.e a TOP start or TOP Stop heating command for this zone) 
      var JSONmessage=JSON.parse(message);
      message=message.toString() // message is Buffer 
-     if( VERBOSE ) console.log("\n*** New MQTT message received: " + message);
+     if( VERBOSE ) console.log("\n*** " + new Date() + " New MQTT message received: " + message);
     
+     // Secpanel MD5 signed message
+     if(topic === 'domoticz/out' && JSONmessage.idx === MyJSecretKeys.DZ_idx_SecPanel) {  // message coming from local Domoticz secpanel. Send a signed request if verified
+          if( !VERBOSE ) console.log("\n*** " + new Date() + " New MQTT message about local Secpanel received: " + message);
+          JSON_API.path = '/json.htm?type=command&param=getsecstatus'
+          JSON_API.path = JSON_API.path.replace(/ /g,"");
+          DomoticzJsonTalk( JSON_API, signedAlarmRequest, JSONmessage );            
+     }  // if(topic === 'domoticz/out' && JSONmessage.idx =
+     
+     if(topic === 'domoticz/out' && JSONmessage.idx === MyJSecretKeys.idx_SecPanel) {     // message coming from another alarm client. Synchronize local Dz Secpanel
+          if( (JSONmessage.RSSI != crypto.createHash('md5').update(JSON.stringify(JSONmessage.description)+MyJSecretKeys.SecPanel_Seccode).digest('hex')) ||  ( ( (new Date() - new Date( JSONmessage.description.datetime )) / 1000 ) > 2 )  )
+              console.log("\n*** " + new Date() + " SECURITY WARNING - Message with invalid MD5 hash or datetime stamp received" );
+          else if( JSONmessage.description.stationID != MyJSecretKeys.DZ_ALARM_CID) {
+              if( !VERBOSE ) console.log("\n*** " + new Date() + " MQTT MD5 signed message about Alarm Request received: " + message);
+              JSON_API.path = '/json.htm?type=command&param=getsecstatus'
+              JSON_API.path = JSON_API.path.replace(/ /g,"");
+              DomoticzJsonTalk( JSON_API, updateSecPanel, JSONmessage );              
+          } // else if( JSONmessage.description.stationID != MyJS
+     } // if(topic === 'domoticz/out' && JSONmessage.idx ===) {    
+     
      // *** Heating Zone TOP start or Stop command message comming from DomoticZ
      if( message.indexOf('"name" : "Horaires/Stop Chauffage"') != -1 ) {    // we received a TOP stop for a zone
           hzoneModified = true;
@@ -312,6 +393,32 @@ client.on('message', function (topic, message) {
             console.log("\n*** " + new Date() + " == FIRE ALARM-SVR ONLINE ==");
             console.log( message + "\n");
             myFireAlarmSvr = 0;
+        } // if( pos != -1 )
+        // VTH message
+        if( VERBOSE ) console.log("Checking for VTH event...");
+        var pos = message.indexOf(VTH_SECPANEL_OFFLINE);
+        if( pos != -1 )  { // Raise alert, MQTT said VTH_SECPANEL is dead !
+            console.log("\n*** " + new Date() + " == VTH SECPANEL FAILURE ==");
+            console.log( message + "\n");
+            myVTHsecpanel = 1;
+        } // if( pos != -1 )  
+        pos = message.indexOf(VTH_SECPANEL_ONLINE);
+        if( pos != -1 )  { // Reset alert, VTH_SECPANEL is back !
+            console.log("\n*** " + new Date() + " == VTH SECPANEL ONLINE ==");
+            console.log( message + "\n");
+            myVTHsecpanel = 0;
+        } // if( pos != -1 )
+        var pos = message.indexOf(VTH_BOX_OFFLINE);
+        if( pos != -1 )  { // Raise alert, MQTT said VTH_BOX is dead !
+            console.log("\n*** " + new Date() + " == VTH BOX FAILURE ==");
+            console.log( message + "\n");
+            myVTHbox = 1;
+        } // if( pos != -1 )  
+        pos = message.indexOf(VTH_BOX_ONLINE);
+        if( pos != -1 )  { // Reset alert, VTH_BOX is back !
+            console.log("\n*** " + new Date() + " == VTH BOX ONLINE ==");
+            console.log( message + "\n");
+            myVTHbox = 0;
         } // if( pos != -1 )
         // heater message        
         if( VERBOSE ) console.log("Checking for Heater event...");
