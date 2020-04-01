@@ -2,6 +2,8 @@
 // ***** mtCluster:
 //        - High Availibilty Active/Passive Domoticz Cluster
 //        - Script for the Passive/Backup server *****
+// V0.30 - April 2020
+          // Change: Strict idx comparison and SECPANEL synchronization based on Alarm request MD5 signed message
 // V0.21 - April 2019
           // Improvement : ["mqtt/out", "SelectorSwitch"] using always passcode now (work for protected and non protected selector switches devices)
           // Fire Alarm server (including its Temp sensor) added to the repository
@@ -103,29 +105,32 @@ function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Do
               else OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"On\"}";   
           if( this.DeviceType === "SelectorSwitch" ) OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"Set Level\", \"level\" : " + JSONmessage.svalue1 + ", \"passcode\" : " + MyJSecretKeys.ProtectedDevicePassword + "}";
           if( this.DeviceType === "Thermostat" ||  this.DeviceType === "Temperature" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + "\"}";               
-          PassiveSvr.publish('domoticz/in', OUTsyncmsg );  
-          if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming message sent to Backup domoticz/in server: " + OUTsyncmsg);
           if( this.DeviceType === "Secpanel" ) {
               if( JSONmessage.nvalue === MSECPANEL_ARM_HOME ) L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_HOME + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
               if( JSONmessage.nvalue === MSECPANEL_ARM_AWAY ) L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_AWAY + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
               if( JSONmessage.nvalue === MSECPANEL_DISARM )   L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_DISARM   + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
               L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
               LDomoticzJsonTalk( L_JSON_API, LdzStatus );   
-              if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming SecPanel message sent to Backup domoticz/JSON server: " + OUTsyncmsg);
+              if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming SecPanel message sent to Backup domoticz/JSON server");
           } // if( this.DeviceType === "Secpanel" ) {
+          else {
+              PassiveSvr.publish('domoticz/in', OUTsyncmsg );  
+              if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming message sent to Backup domoticz/in server: " + OUTsyncmsg);
+          }  // if( this.DeviceType === "Secpanel" ) {
        } // if( this.DataSource = "mqtt/out" ) {  
     }  // this.DataProcess = function( syncmsg )
 }   // function synchronize( IDX, DataSource, DataStore ) {
 
 // Here all Domoticz Idx to synchronize [$$SYNC_REPOSITORY]
 var   myIDXtoSync      = [ new IDXtoSync( 50, "mqtt/out", "Light/Switch" ),  new IDXtoSync( 51, "mqtt/out", "Light/Switch" ),  // 50/51=Entree and Mezzanine lighting 
-                           new IDXtoSync( MyJSecretKeys.idx_SecPanel, "mqtt/in", "" ), new IDXtoSync( MyJSecretKeys.idx_AlarmALERT, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_AlarmARM, "mqtt/in", "" ),  // Secpanel, Alarm Armed and Alarm Alert flags
+                           new IDXtoSync( MyJSecretKeys.DZ_idx_SecPanel, "mqtt/in", "" ), // When main DZ down, to answer to Getsecpanel request like { "command" : "getdeviceinfo", "idx" : MyJSecretKeys.DZ_idx_SecPanel }
+                           new IDXtoSync( MyJSecretKeys.idx_AlarmALERT, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_AlarmARM, "mqtt/in", "" ),  // Secpanel, Alarm Armed and Alarm Alert flags
                            new IDXtoSync( 34, "mqtt/in", ""),   // 34=Hot Water Tank
                            new IDXtoSync( 27, "mqtt/in", "" ),  new IDXtoSync( 28, "mqtt/in", "" ),   new IDXtoSync( 29, "mqtt/in", ""), new IDXtoSync( 30, "mqtt/in", "" ),   new IDXtoSync( 31, "mqtt/in", ""),   // Ground Floor Heaters
                            new IDXtoSync( 35, "mqtt/in", "" ),  new IDXtoSync( 36, "mqtt/in", "" ),   new IDXtoSync( 37, "mqtt/in", ""), new IDXtoSync( 38, "mqtt/in", "" ),   // First Floor Heaters   
                            new IDXtoSync( MyJSecretKeys.idx_FireAlarmTempHum, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_FireAlarmHeatidx, "mqtt/in", "" ), // Temp sensor of Fire Alarm server
                            new IDXtoSync( MyJSecretKeys.idx_FireALarmStatus, "mqtt/out", "SelectorSwitch" ), // Fire Alarm server status
-                           new IDXtoSync( MyJSecretKeys.idx_SecPanel, "mqtt/out", "Secpanel" ), // Secpanel 
+                           new IDXtoSync( MyJSecretKeys.idx_SecPanel, "mqtt/out", "Secpanel" ), // When main DZ up, backup server Secpanel synchro when receiving Alarm request MD5 signed message
                            new IDXtoSync( 17, "mqtt/out", "SelectorSwitch" ), new IDXtoSync( 16, "mqtt/out", "Thermostat" ) ];   //  17=Main heating breaker (OFF/HORSGEL/ECO/CONFORT), 16=Heating thermostat setpoint
                            // heating display/schedule to add to the repository in the future
 // [$$SYNC_REPOSITORY]
@@ -355,7 +360,7 @@ var MRaisefailureFlag = function( error, data ) { // Raise failure flag using Ma
 }; // var MRaisefailureFlag = fu
 
 // *************** MAIN START HERE ***************
-console.log("\n*** " + new Date() + " - mtCluster V0.21 High Availability Domoticz Cluster starting ***");
+console.log("\n*** " + new Date() + " - mtCluster V0.30 High Availability Domoticz Cluster starting ***");
 console.log("mtCluster MQTT servers hardware  = " +  MyJSecretKeys.MAIN_SERVER_HARDWARE + " - " + MyJSecretKeys.BACKUP_SERVER_HARDWARE);
 console.log("mtCluster MQTT nodes address     = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
 console.log("mtCluster Domoticz nodes address = " +  M_JSON_API.host + ":" + M_JSON_API.port + " - " + L_JSON_API.host + ":" + L_JSON_API.port);
@@ -424,7 +429,7 @@ ActiveSvr.on('message', function (topic, message) {
         if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: SYNC, Checking this message from " + topic.toString() + ": " + message.toString() ); 
         var IDXsmsg =  JSONmessage.idx;
         myIDXtoSync.forEach(function( value ) {
-          if ( IDXsmsg == value.IDX ) value.DzSynchronize( topic, message );                   
+          if ( IDXsmsg === value.IDX ) value.DzSynchronize( topic, message );                 
         });    
      } //  if( dzFAILURE ) {
 }) // ActiveSvr.on('message', funct
