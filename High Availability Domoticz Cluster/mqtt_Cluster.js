@@ -2,6 +2,8 @@
 // ***** mtCluster:
 //        - High Availibilty Active/Passive Domoticz Cluster
 //        - Script for the Passive/Backup server *****
+// V0.31 - April 2020
+          // Security improvement: verify MD5 signed message stamp  
 // V0.30 - April 2020
           // Change: Strict idx comparison and SECPANEL synchronization based on Alarm request MD5 signed message
 // V0.21 - April 2019
@@ -40,6 +42,7 @@
 const VERBOSE          = false; // Detailed logging or not
 const MyJSecretKeys    = require('/home/pi/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');
 var SSHclient          = require('ssh2').Client;
+const crypto           = require('crypto');  
 
 // SECpanel Status 
 const MSECPANEL_DISARM           = 0;    // using MQTT
@@ -87,9 +90,10 @@ function newIP( newIPaddress ) {
   ifconfig.on('close', (code)       => { console.log(`child process exited with code ${code}`); console.log("}"); });
 }  // function newIP( newIPaddress ) {   
 
+
 function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Domoticz Idx  
     // IDX = Domoticz IDX
-    // Datasource : source of the data (currently only MQTT incoming or outcoming messages), "mqtt/in" for activeserver/mqtt/domoticz/in topic or "mqtt/out" for activeserver/mqtt/domoticz/out topic 
+    // Datasource : source of the data (currently only MQTT incoming or outgoing messages), "mqtt/in" for activeserver/mqtt/domoticz/in topic or "mqtt/out" for activeserver/mqtt/domoticz/out topic 
     // DeviceType : the Domoticz corresponding device type, currently type only supported are "Light/Switch", "SelectorSwitch", "Temperature" and "Thermostat"  
     this.IDX = IDX; this.DataSource = DataSource; this.DeviceType = DeviceType;
     this.DzSynchronize = function( topic, INsyncmsg ) { 
@@ -106,16 +110,18 @@ function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Do
           if( this.DeviceType === "SelectorSwitch" ) OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"Set Level\", \"level\" : " + JSONmessage.svalue1 + ", \"passcode\" : " + MyJSecretKeys.ProtectedDevicePassword + "}";
           if( this.DeviceType === "Thermostat" ||  this.DeviceType === "Temperature" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + "\"}";               
           if( this.DeviceType === "Secpanel" ) {
-              if( JSONmessage.nvalue === MSECPANEL_ARM_HOME ) L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_HOME + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
-              if( JSONmessage.nvalue === MSECPANEL_ARM_AWAY ) L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_AWAY + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
-              if( JSONmessage.nvalue === MSECPANEL_DISARM )   L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_DISARM   + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
-              L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
-              LDomoticzJsonTalk( L_JSON_API, LdzStatus );   
-              if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming SecPanel message sent to Backup domoticz/JSON server");
+              if( (JSONmessage.RSSI != crypto.createHash('md5').update(JSON.stringify(JSONmessage.description)+MyJSecretKeys.SecPanel_Seccode).digest('hex')) ||  ( ( (new Date() - new Date( JSONmessage.description.datetime )) / 1000 ) > 2 )  )
+                  console.log("\n[" + new Date() + " mqttCluster-ALERT] Server: MAIN, Service: SYNC, SECURITY WARNING - Message with invalid MD5 hash or datetime stamp received" );
+              else {
+                  L_JSON_API.path = '/json.htm?type=command&param=getsecstatus'
+                  L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
+                  LDomoticzJsonTalk( L_JSON_API, updateSecPanel, JSONmessage );
+                  if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, MD5 signed Alarm Request message sent to Backup domoticz/JSON server: " + INsyncmsg);
+              }  // if( (JSONmessage.RSSI != crypto.createHash('md5')
           } // if( this.DeviceType === "Secpanel" ) {
           else {
               PassiveSvr.publish('domoticz/in', OUTsyncmsg );  
-              if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outcoming message sent to Backup domoticz/in server: " + OUTsyncmsg);
+              if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outgoing message sent to Backup domoticz/in server: " + OUTsyncmsg);
           }  // if( this.DeviceType === "Secpanel" ) {
        } // if( this.DataSource = "mqtt/out" ) {  
     }  // this.DataProcess = function( syncmsg )
@@ -305,39 +311,45 @@ setInterval(function( ) { // Backup server Mqtt Heartbeat
 
 // Function to talk to MAIN DomoticZ. Do Callback if any 
 var MDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {    
-   var savedURL=JSON.stringify(JsonUrl);
+   var savedURL         = JSON.stringify(JsonUrl);                     
+   var _JsonUrl         = JSON.parse(savedURL);      // Function scope to capture values of JsonUrl and objectToCompute next line 
+   var _objectToCompute = "";
+   if( objectToCompute ) _objectToCompute = JSON.parse(JSON.stringify(objectToCompute));
    if( VERBOSE ) console.log("\n** Main DomoticZ URL request=" + savedURL );
-   http_MDomoticz.get(JsonUrl, function(resp){
+   http_MDomoticz.get(_JsonUrl, function(resp){
       var HttpAnswer = "";
       resp.on('data', function(ReturnData){ 
             HttpAnswer += ReturnData;
       });
       resp.on('end', function(ReturnData){ 
          if( VERBOSE ) console.log("\nMain DomoticZ answer=" + HttpAnswer);
-         if( callBack ) callBack( null, JSON.parse(HttpAnswer), objectToCompute );
+         if( callBack ) callBack( null, JSON.parse(HttpAnswer), _objectToCompute );
       });
    }).on("error", function(e){
          if( dzFAILUREcount === TIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: DOMOTICZ, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
-         if( callBack ) callBack( e, null, objectToCompute );
+         if( callBack ) callBack( e, null, _objectToCompute );
    });
 };   // function MDomoticzJsonTalk( JsonUrl ) 
 
 // Function to talk to LOCAL/BACKUP DomoticZ. Do Callback if any 
 var LDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {    
-   var savedURL=JSON.stringify(JsonUrl);
+   var savedURL         = JSON.stringify(JsonUrl);
+   var _JsonUrl         = JSON.parse(savedURL);      // Function scope to capture values of JsonUrl and objectToCompute next line
+   var _objectToCompute = "";
+   if( objectToCompute ) _objectToCompute = JSON.parse(JSON.stringify(objectToCompute));
    if( VERBOSE ) console.log("\n** Backup DomoticZ URL request=" + savedURL );
-   http_LDomoticz.get(JsonUrl, function(resp){
+   http_LDomoticz.get(_JsonUrl, function(resp){
       var HttpAnswer = "";
       resp.on('data', function(ReturnData){ 
             HttpAnswer += ReturnData;
       });
       resp.on('end', function(ReturnData){ 
          if( VERBOSE ) console.log("\nBackup DomoticZ answer=" + HttpAnswer);
-         if( callBack ) callBack( null, JSON.parse(HttpAnswer), objectToCompute );
+         if( callBack ) callBack( null, JSON.parse(HttpAnswer), _objectToCompute );
       });
    }).on("error", function(e){
          if( LdzFAILUREcount === LTIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: DOMOTICZ, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
-         if( callBack ) callBack( e, null, objectToCompute );
+         if( callBack ) callBack( e, null, _objectToCompute );
    });
 };   // function LDomoticzJsonTalk( JsonUrl ) 
 
@@ -359,8 +371,20 @@ var MRaisefailureFlag = function( error, data ) { // Raise failure flag using Ma
   }  // if( GetAlarmIDX.result[0].Status === 
 }; // var MRaisefailureFlag = fu
 
+var updateSecPanel = function( error, SecPanel, alarmToken ) {
+  if( error ) return;
+  if( (SecPanel.secstatus === JSECPANEL_DISARM   && alarmToken.nvalue != MSECPANEL_DISARM)     || 
+      (SecPanel.secstatus === JSECPANEL_ARM_HOME && alarmToken.nvalue != MSECPANEL_ARM_HOME)   || 
+      (SecPanel.secstatus === JSECPANEL_ARM_AWAY && alarmToken.nvalue != MSECPANEL_ARM_AWAY) ) {
+          if( alarmToken.nvalue === MSECPANEL_ARM_HOME ) L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_HOME + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
+          if( alarmToken.nvalue === MSECPANEL_ARM_AWAY ) L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_ARM_AWAY + '&seccode=' + MyJSecretKeys.SecPanel_Seccode; 
+          if( alarmToken.nvalue === MSECPANEL_DISARM )   L_JSON_API.path = '/json.htm?type=command&param=setsecstatus&secstatus=' + JSECPANEL_DISARM   + '&seccode=' + MyJSecretKeys.SecPanel_Seccode;
+          LDomoticzJsonTalk( L_JSON_API );        
+  } // if( (SecPanel.secstatus === JSECPANEL_DISARM   && alarmT
+}; // var updateSecPanel = funct
+
 // *************** MAIN START HERE ***************
-console.log("\n*** " + new Date() + " - mtCluster V0.30 High Availability Domoticz Cluster starting ***");
+console.log("\n*** " + new Date() + " - mtCluster V0.31 High Availability Domoticz Cluster starting ***");
 console.log("mtCluster MQTT servers hardware  = " +  MyJSecretKeys.MAIN_SERVER_HARDWARE + " - " + MyJSecretKeys.BACKUP_SERVER_HARDWARE);
 console.log("mtCluster MQTT nodes address     = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
 console.log("mtCluster Domoticz nodes address = " +  M_JSON_API.host + ":" + M_JSON_API.port + " - " + L_JSON_API.host + ":" + L_JSON_API.port);
@@ -423,7 +447,7 @@ ActiveSvr.on('message', function (topic, message) {
         } if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Failover] Server: MAIN, Service: FAILOVER, Message IGNORED from domoticz/out: " + message.toString() );
      } else {  
         // Cluster Normal Condition here
-        // The reason to filter and so not republish all incoming messages is mainly for some actuators declared as outcoming message device in the repository, whose internal state changes by a Domoticz command or not. 
+        // The reason to filter and so not republish all incoming messages is mainly for some actuators declared as outgoing message device in the repository, whose internal state changes by a Domoticz command or not. 
         // If state change decided locally to the device, we would have an incoming message and an outgoing message, hence two lines in the corresponding Domoticz device log
         // Can be changed in the future to avoid any incoming message device declaration in the repository
         if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: SYNC, Checking this message from " + topic.toString() + ": " + message.toString() ); 
