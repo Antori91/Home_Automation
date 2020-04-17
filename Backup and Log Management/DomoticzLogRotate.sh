@@ -1,7 +1,7 @@
 #!/bin/sh
 # @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 # ***** Domoticz database backup and log management *****
-# V1.0 - April 2020    - x
+# V1.0 - April 2020    - Dahua VTH Security Panel log added
 # V0.95- May 2019      - Main server IP changed to 127.0.0.1
 # V0.9 - April 2019    - Grep in Domoticz logfile MSG instead of Heater, Lighting, ALARM and HotWaterTank
 #                      - Tail -n25 instead of cat the Domoticz and motionEye connections
