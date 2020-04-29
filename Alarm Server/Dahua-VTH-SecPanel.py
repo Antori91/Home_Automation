@@ -4,12 +4,13 @@
 Author: Antori91 -- http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 DHIP/DVRIP routines -- https://github.com/mcw0/Tools/blob/master/Dahua-JSON-Debug-Console-v2.py
 Subject: Dahua VTH used as Security Panel to arm/disarm an external non Dahua Alarm Appliance
+V0.15 - May 2020
+      - Improve handling of communication issues 
 V0.12 - April 2020 
       - Watchdog implementation
       - Allow keepAlive to fail for a few minutes before initiating a new VTH session
       - Fix: when VTH was disconnected, don't send anymore keepAlive message and discard MQTT messages       
 V0.11 - April 2020 - Initial release 
-V0.1g - March 2020 - BETA
 
 === Security concerns ===
 MQTT: Alarm request Messages signed using MD5 hash.
@@ -42,12 +43,13 @@ global verbose
 verbose = False
 
 SECURITY_BREACH      = 255
-WATCHDOG_TRIGGER     = 600 # If P2P or MQTT fail for such time period in s, program terminates 
-MAX_FAILED_KEEPALIVE = 300 # If VTH keepAlive fail for such time period in s, new VTH session is initiated
+WATCHDOG_RESET       = 600 # If P2P or MQTT fail for such time period in s, program terminates 
+MAX_FAILED_KEEPALIVE = 180 # If VTH keepAlive fail for such time period in s, new VTH session is initiated
 NORMAL_TERMINATION   = 0
 WATCHDOG_TERMINATION = 1
 DISARM_FREEZE_DELAY  = 60  # Following VTH login, disarming allowed only after a delay of n seconds  
 SOCKET_TIMEOUT       = 5   # Main timeout in s used
+
 
 # ---------------
 # WATCHDOG
@@ -56,15 +58,33 @@ SOCKET_TIMEOUT       = 5   # Main timeout in s used
 class _Watchdog:
 
     def __init__(self):
-        self.WatchdogTrigger = WATCHDOG_TRIGGER
-        
+        self.WatchdogTrigger   = WATCHDOG_RESET
+        self.WatchdogTriggered = False
+                
     def run(self, threadName):    
         if verbose: log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-WATCHDOG] STARTED" )
         while self.WatchdogTrigger > 0:
             if not mqttc.connected_flag: time.sleep( 1 )
             mqttc.loop() # Process Mqtt stuff - 1 s blocking delay
-            if( Dahua.VTH_ON_LINE != 0 or not mqttc.connected_flag): self.WatchdogTrigger -= 1
-            else: self.WatchdogTrigger = WATCHDOG_TRIGGER
+            if Dahua.SERVICE_SUSPENDED: break
+            if( Dahua.VTH_ON_LINE != 0 or not mqttc.connected_flag or Dahua.lock.locked() ): self.WatchdogTrigger -= 1
+            else: self.WatchdogTrigger = WATCHDOG_RESET
+        self.WatchdogTriggered = True        
+        log.failure( "[" + str(datetime.datetime.now()) + " WATCHDOG] TRIGGERED - VTH BOX Connection: {}".format(Dahua.VTH_ON_LINE) + " - MQTT Connection: {}".format(mqttc.connected_flag) +\
+                     " - SERVICE_SUSPENDED: {}".format(Dahua.SERVICE_SUSPENDED) + " - P2P Locked: {}".format(Dahua.lock.locked()) )           
+        if mqttc.connected_flag: 
+            mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(dzAlarmRAISE_ALARM_FAILURE))        
+            if Dahua.SERVICE_SUSPENDED: mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(SECURITY_ALERT_VTH_SecPanel))
+            else: mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(WATCHDOG_ALERT_VTH_SecPanel))
+            mqttc.loop()           
+            mqttc.disconnect()
+        global stop_threads
+        stop_threads = True
+        if not coldBootP2P and not Dahua.lock.locked(): P2P_timeout_Thread.join()
+        if Dahua.VTH_ON_LINE == 0 and not Dahua.SERVICE_SUSPENDED: Dahua.logout()
+        while Dahua.SERVICE_SUSPENDED: # to avoid program respawn
+            time.sleep( 3600 ) 
+        if Dahua.lock.locked(): os._exit(WATCHDOG_TERMINATION)
 
 
 # ---------------
@@ -151,7 +171,7 @@ def on_message(mqttc, userdata, msg):
                
 def on_disconnect(mqttc, userdata, rc):
     if rc != 0:
-        log.failure("[" + str(datetime.datetime.now()) + " VTH-MQTT_FAILURE] MQTT went OFF LINE" )
+        log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_FAILURE] MQTT went OFF LINE" )
         mqttc.connected_flag = False 
         MQTTerrorLogged      = True
 
@@ -351,20 +371,25 @@ class Dahua_Functions:
                 "id":self.ID,
                 "session":self.SessionID}
             
-            if stop(): break              # stop the thread received
+            if stop(): break                   # stop the thread received
             if self.VTH_ON_LINE != 0: continue # VTH is disconnected, don't send keepAlive message
       
             data = self.P2P(json.dumps(query_args))
-            if data == None:  # keepAlive failed
-                self.KeepAlive_Failed -= 1
+            if data == None:  # keepAlive failed 
+                log.warn("[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] KEEPALIVE FAILED - No answer from VTH.")
+                if self.VTH_ON_LINE == 0: self.KeepAlive_Failed -= 1  # but no socket error
                 if self.KeepAlive_Failed <= 0: self.VTH_ON_LINE = self.P2P_traceError() # KO 
             elif len(data) == 1:            
                 if verbose: log.info("P2P-1.Callback message received: {}".format(data))
                 data = json.loads(data)
                 if data.get('result'):
+                    log.warn("[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] KEEPALIVE FAILED - Incorrect answer(1) from VTH.")
                     self.VTH_ON_LINE = 0 # OK
-                    self.KeepAlive_Failed = self.MAX_KeepAlive_Failed # keepAlive back        
-                else:  # keepAlive failed
+                    self.KeepAlive_Failed -= 1
+                    if self.KeepAlive_Failed <= 0: self.VTH_ON_LINE = self.P2P_traceError() # KO       
+                else:  # keepAlive failed but no socket error
+                    log.warn("[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] KEEPALIVE FAILED - Incorrect answer(2) from VTH.")
+                    self.VTH_ON_LINE = 0 # OK
                     self.KeepAlive_Failed -= 1
                     if self.KeepAlive_Failed <= 0: self.VTH_ON_LINE = self.P2P_traceError() # KO 
             else:
@@ -415,11 +440,10 @@ class Dahua_Functions:
                 
                 for NUM in range(0,len(data)):
                     if data[NUM].get('result'): 
-                        self.VTH_ON_LINE = 0 # OK  
-                        self.KeepAlive_Failed = self.MAX_KeepAlive_Failed  # keepAlive Back                           
-                    else:  # keepAlive failed
-                        self.KeepAlive_Failed -= 1
-                        if self.KeepAlive_Failed <= 0: self.VTH_ON_LINE = self.P2P_traceError() # KO 
+                        self.VTH_ON_LINE = 0 # OK
+                        if self.KeepAlive_Failed != self.MAX_KeepAlive_Failed: # keepAlive Back  
+                            self.KeepAlive_Failed = self.MAX_KeepAlive_Failed
+                            log.success("[" + str(datetime.datetime.now()) + " VTH-P2P_OK] KEEPALIVE BACK")                 
 
    
     def P2P_traceError(self):
@@ -458,12 +482,11 @@ class Dahua_Functions:
         try:
             self.remote.send(header + packet.encode('latin-1'))
         except Exception as e:
-            if self.lock.locked():
-                self.lock.release()
+            if self.lock.locked(): self.lock.release()
             self.socket_event.set()
             log.failure("[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] Sending failure with error code: {}".format(str(e)) )
             self.VTH_ON_LINE = self.P2P_traceError() # KO
-
+            return None
         #
         # We must expect there is no output from remote device
         # Some debug cmd do not return any output, some will return after timeout/failure, most will return directly
@@ -483,11 +506,14 @@ class Dahua_Functions:
                 if tmp == len(data):
                     break
             except Exception as e:
+                if self.lock.locked(): self.lock.release()
                 self.socket_event.set()
+                log.failure("[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] Receiving failure with error code: {}".format(str(e)) )
+                self.VTH_ON_LINE = self.P2P_traceError() # KO
                 return None
 
         if not len(data):
-            if self.lock.locked():
+            if self.lock.locked(): 
                 self.lock.release()
                 log.warn("[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] No answer from VTH. Packet sent to VTH BOX was: " + packet )
                 return None
@@ -520,6 +546,7 @@ class Dahua_Functions:
                     print("PROTO: \033[92m[\033[91m{}\033[92m]\033[0m".format(binascii.b2a_hex(data[0:4].encode('latin-1')).decode('latin-1')))
                     print(hexdump(data))
                     self.VTH_ON_LINE = self.P2P_traceError() # KO
+                    if self.lock.locked(): self.lock.release()
                     return None
                 P2P_data = data[0:LEN_RECVED]
                 if LEN_RECVED:
@@ -539,7 +566,8 @@ class Dahua_Functions:
     
     def Dahua_Login(self):
 
-        if self.lock.locked(): self.lock.release()
+        #if self.lock.locked(): self.lock.release()
+        self.socket_event.clear()
         self.ID = random.randint(0,9999)
         context.log_level = 'CRITICAL'            
         try:
@@ -568,7 +596,7 @@ class Dahua_Functions:
         
         self.LoginTime   = datetime.datetime.now()
         self.VTHCxion    = hashlib.md5(open('/home/pi/iot_domoticz/Dahua-VTH-BOX-cxion.log','rb').read()).hexdigest()
-        if verbose: log.info("[" + str(datetime.datetime.now()) + "  self.ID]  initialized to {}".format( self.ID))
+        if verbose: log.info("[" + str(datetime.datetime.now()) + " self.ID] initialized to {}".format( self.ID))
         self.VTH_ON_LINE = 0 # OK
         return True   
             
@@ -634,11 +662,11 @@ class Dahua_Functions:
         keepAlive = data['params']['keepAliveInterval']
         self.MAX_KeepAlive_Failed = int( MAX_FAILED_KEEPALIVE / keepAlive )
         self.KeepAlive_Failed     = self.MAX_KeepAlive_Failed
-        if verbose: log.info("VTH KEEPALIVE: {}".format(keepAlive))
         if coldBootP2P: 
             global P2P_timeout_Thread
             P2P_timeout_Thread = Thread( target=self.P2P_timeout, args=("P2P_timeout", keepAlive, lambda: stop_threads,) )
             P2P_timeout_Thread.start()
+            log.info( "[" + str(datetime.datetime.now()) + " VTH_SecPanel-KEEPALIVE] STARTED. Ping every {}".format(keepAlive) + "s")
         
         if verbose: login.success("Success")
 
@@ -710,11 +738,11 @@ class Dahua_Functions:
         keepAlive = 30 # Seems to be stable
         self.MAX_KeepAlive_Failed = int( MAX_FAILED_KEEPALIVE / keepAlive )
         self.KeepAlive_Failed     = self.MAX_KeepAlive_Failed
-        if verbose: log.info("VTH KEEPALIVE: {}".format(keepAlive))
         if coldBootP2P: 
             global P2P_timeout_Thread
             P2P_timeout_Thread = Thread( target=self.P2P_timeout, args=("P2P_timeout", keepAlive, lambda: stop_threads,) )
             P2P_timeout_Thread.start()
+            log.info( "[" + str(datetime.datetime.now()) + " VTH_SecPanel-KEEPALIVE] STARTED. Ping every {}".format(keepAlive) + "s")
             
         self.header =  p32(0xf6000000,endian='big') + '_LEN__ID_'.encode('latin-1') + p32(0x0) + '_LEN_'.encode('latin-1') + p32(0x0) + '_SessionHexID_'.encode('latin-1') + p32(0x0)
 
@@ -819,7 +847,8 @@ class Dahua_Functions:
             if verbose: log.info("P2P-1. VTH_SetSecPanel Service Call answer: {}".format(data))
             data = json.loads(data)
             if data.get('result'):
-                self.VTH_ON_LINE = 0 # OK
+                self.VTH_ON_LINE = self.P2P_traceError() # KO
+                return False
             else: 
                 self.VTH_ON_LINE = self.P2P_traceError() # KO
                 return False
@@ -893,15 +922,15 @@ class Dahua_Functions:
         if not data == None:
             data = json.loads(data)
             if data.get('result'):
-                if verbose: log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_Info] Global.logout OK" )
+                log.info("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_Info] LOGOUT" )
                 self.remote.close()
                 return True
             else:
-                log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] Global.logout error code: {}".format(data)) 
+                log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] LOGOUT with error code: {}".format(data)) 
                 self.remote.close()
                 return False
         else:
-            log.warn("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] Global.logout without ACK" )
+            log.warn("[" + str(datetime.datetime.now()) + " VTH_SecPanel-P2P_FAILURE] LOGOUT without ACK" )
             self.remote.close()
             return False
         
@@ -913,7 +942,7 @@ class Dahua_Functions:
 if __name__ == '__main__':
 
 
-    INFO = "[" + str(datetime.datetime.now()) + " iot_Dahua_VTH_SecPanel V0.12 starting]"
+    INFO = "[" + str(datetime.datetime.now()) + " iot_Dahua_VTH_SecPanel V0.15 starting]"
     
     AlarmProfile    = { 0: "AlarmDisable", 9: "Outdoor", 11: "AtHome" }             # DZ SecPanel to corresponding VTH AlarmEnable/profile
     VTHAlarmProfile = { "Outdoor": 9, "AtHome": 11, "Sleeping": 11, "Custom": 11 }  # VTH to corresponding DZ SecPanel for VTH AlarmEnable=True       
@@ -959,21 +988,21 @@ if __name__ == '__main__':
     WatchdogThread = Thread( target=Watchdog.run, args=("WATCHDOG", ) )
     WatchdogThread.start()
 
-    while True:                
+    while not Watchdog.WatchdogTriggered:                
         if not mqttc.connected_flag: 
             try:
                 if coldBootMQTT:
                     mqttc.connect(mySecretKeys[ "MAIN_SERVER_IP" ], mySecretKeys[ "MQTT_PORT" ]) 
-                    log.success( "[" + str(datetime.datetime.now()) + " VTH-MQTT_OK] CONNECTED to MQTT" )
+                    log.success( "[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_OK] CONNECTED to MQTT" )
                     coldBootMQTT = False
                 else: 
                     mqttc.reconnect()
-                    log.success( "[" + str(datetime.datetime.now()) + " VTH-MQTT_OK] MQTT back ON LINE" )
+                    log.success( "[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_OK] MQTT back ON LINE" )
                     time.sleep(0.3)
                 MQTTerrorLogged = False
             except Exception as e:
                 if coldBootMQTT and not MQTTerrorLogged:
-                    log.failure( "[" + str(datetime.datetime.now()) + " VTH-MQTT_FAILURE] MQTT is DOWN - Trying to connect every " + str(SOCKET_TIMEOUT) + "s" )
+                    log.failure( "[" + str(datetime.datetime.now()) + " VTH_SecPanel-MQTT_FAILURE] MQTT is DOWN - Trying to connect every " + str(SOCKET_TIMEOUT) + "s" )
                     MQTTerrorLogged = True
                     time.sleep(SOCKET_TIMEOUT)
                              
@@ -989,6 +1018,7 @@ if __name__ == '__main__':
                 else:         
                     if not P2PerrorLogged: log.failure( "[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] VTH BOX is DOWN - Trying to connect every " + str(SOCKET_TIMEOUT) + "s" )
                     P2PerrorLogged = True
+                    time.sleep(SOCKET_TIMEOUT)
             else:
                 if not P2PerrorLogged:
                     log.failure( "[" + str(datetime.datetime.now()) + " VTH-P2P_FAILURE] VTH BOX went OFF LINE - P2P error at line#: " + str(Dahua.VTH_ON_LINE) )
@@ -1011,26 +1041,6 @@ if __name__ == '__main__':
                         if Dahua.VTH_GetSecPanelChange(): P2PerrorLogged  = False
                   
         time.sleep( 0.5 )          
-        if Dahua.SERVICE_SUSPENDED: break
-        if Watchdog.WatchdogTrigger <= 0: break
-   
-    # We should never arrive here...unless Security issue or Watchdog trigger
-    if Watchdog.WatchdogTrigger <= 0: WatchdogFlag=True
-    else: WatchdogFlag=False
-    log.failure("[" + str(datetime.datetime.now()) + " VTH_SecPanel-Disconnecting] SERVICE_SUSPENDED: {}".format(Dahua.SERVICE_SUSPENDED) + " - WATCHDOG: {}".format(WatchdogFlag))   
-    if Dahua.SERVICE_SUSPENDED and mqttc.connected_flag: 
-        mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(dzAlarmRAISE_ALARM_FAILURE))        
-        mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(SECURITY_ALERT_VTH_SecPanel))
-        mqttc.loop()         
-    if WatchdogFlag and mqttc.connected_flag: 
-        mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(dzAlarmRAISE_ALARM_FAILURE))        
-        mqttc.publish(mySecretKeys[ "DZ_IN_TOPIC" ], json.dumps(WATCHDOG_ALERT_VTH_SecPanel))
-        mqttc.loop()           
-    if Dahua.VTH_ON_LINE == 0 and not Dahua.SERVICE_SUSPENDED: Dahua.logout()
-    if mqttc.connected_flag: mqttc.disconnect()
-    stop_threads = True
-    if not coldBootP2P: P2P_timeout_Thread.join()
-    while Dahua.SERVICE_SUSPENDED: # to avoid program respawn
-        time.sleep( 3600 )    
-    if WatchdogFlag: sys.exit(WATCHDOG_TERMINATION)
-    else: sys.exit(NORMAL_TERMINATION)
+
+    # We should never arrive here...unless Watchdog triggered
+    sys.exit(WATCHDOG_TERMINATION)
