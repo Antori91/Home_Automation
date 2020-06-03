@@ -27,6 +27,8 @@ Powerful and low price sensors/actuators. Tailored solution leveraging existing 
   - https://www.domoticz.com/forum/viewtopic.php?f=38&t=22436
 
   - https://www.domoticz.com/forum/viewtopic.php?f=38&t=23914
+  
+  - https://www.domoticz.com/forum/viewtopic.php?f=38&t=31991
 
   - https://easydomoticz.com/forum/viewtopic.php?f=21&t=4798
 
