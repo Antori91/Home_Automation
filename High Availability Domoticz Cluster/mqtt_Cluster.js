@@ -2,6 +2,8 @@
 // ***** mtCluster:
 //        - High Availibilty Active/Passive Domoticz Cluster
 //        - Script for the Passive/Backup server *****
+// V0.40/V0.41 - December 2020
+          // New feature : Main server synchronization for some backup server devices (used for UPS and Linky smart meter devices)
 // V0.31 - April 2020
           // Security improvement: verify MD5 signed message stamp  
 // V0.30 - April 2020
@@ -101,14 +103,18 @@ function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Do
           PassiveSvr.publish('domoticz/in', INsyncmsg );    
           if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Incoming message sent to Backup domoticz/in server: " + INsyncmsg);
        } // if( this.DataSource === "mqtt/in" )  { 
-       if( this.DataSource === "mqtt/out" && topic == 'domoticz/out' ) {  // OUT MQTT/JSON Domoticz format must be changed to the IN one before republishing   
+       if( (this.DataSource === "mqtt/out" || this.DataSource === "mqtt/bck_out" ) && topic == 'domoticz/out' ) {  // OUT MQTT/JSON Domoticz format must be changed to the IN one before republishing   
           var JSONmessage=JSON.parse( INsyncmsg );
           var OUTsyncmsg;           
           if( this.DeviceType === "Light/Switch" )
               if( JSONmessage.nvalue == 0 ) OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"Off\"}";
               else OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"On\"}";   
           if( this.DeviceType === "SelectorSwitch" ) OUTsyncmsg = "{\"command\" : \"switchlight\", \"idx\" : " + this.IDX + ", \"switchcmd\" : \"Set Level\", \"level\" : " + JSONmessage.svalue1 + ", \"passcode\" : " + MyJSecretKeys.ProtectedDevicePassword + "}";
-          if( this.DeviceType === "Thermostat" ||  this.DeviceType === "Temperature" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + "\"}";               
+          if( this.DeviceType === "Thermostat" ||  this.DeviceType === "Temperature" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + "\"}"; 
+          if( this.DeviceType === "Current3phases" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + ";" + JSONmessage.svalue2 + ";" + JSONmessage.svalue3 + "\"}"; 
+          if( this.DeviceType === "Percentage" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + "\"}"; 
+          if( this.DeviceType === "kWh" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + ";" + JSONmessage.svalue2 + "\"}";
+          if( this.DeviceType === "Custom" ) OUTsyncmsg = "{\"command\" : \"udevice\", \"idx\" : " + this.IDX + ", \"nvalue\" : 0, \"svalue\" : \"" + JSONmessage.svalue1 + "\"}";                         
           if( this.DeviceType === "Secpanel" ) {
               if( (JSONmessage.RSSI != crypto.createHash('md5').update(JSON.stringify(JSONmessage.description)+MyJSecretKeys.SecPanel_Seccode).digest('hex')) ||  ( ( (new Date() - new Date( JSONmessage.description.datetime )) / 1000 ) > 2 )  )
                   console.log("\n[" + new Date() + " mqttCluster-ALERT] Server: MAIN, Service: SYNC, SECURITY WARNING - Message with invalid MD5 hash or datetime stamp received" );
@@ -120,14 +126,28 @@ function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Do
               }  // if( (JSONmessage.RSSI != crypto.createHash('md5')
           } // if( this.DeviceType === "Secpanel" ) {
           else {
-              PassiveSvr.publish('domoticz/in', OUTsyncmsg );  
-              if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outgoing message sent to Backup domoticz/in server: " + OUTsyncmsg);
+              if( this.DataSource === "mqtt/out" ) {
+                  PassiveSvr.publish('domoticz/in', OUTsyncmsg ); 
+                  if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: MAIN, Service: SYNC, Outgoing message sent to Backup domoticz/in server: " + OUTsyncmsg);
+              } else {  // this.DataSource is "mqtt/bck_out"
+                  ActiveSvr.publish('domoticz/in', OUTsyncmsg );  
+                  if( VERBOSE ) console.log("\n[" + new Date() + " mqttCluster-Info] Server: BACKUP, Service: SYNC, Outgoing message sent to Main domoticz/in server: " + OUTsyncmsg);
+              } // if( this.DataSource === "mqtt/out" ) {   
           }  // if( this.DeviceType === "Secpanel" ) {
-       } // if( this.DataSource = "mqtt/out" ) {  
+       }  // if( (this.DataSource === "mqtt/out" || this.DataSource === "mqtt/bck_out" )
     }  // this.DataProcess = function( syncmsg )
 }   // function synchronize( IDX, DataSource, DataStore ) {
 
-// Here all Domoticz Idx to synchronize [$$SYNC_REPOSITORY]
+// [$$SYNC_REPOSITORY]
+// Backup server devices to synchronize to the main server
+var   myLIDXtoSync     = [ new IDXtoSync( MyJSecretKeys.idx_LinkyL1L2L3current, "mqtt/bck_out", "Current3phases" ), 
+                           new IDXtoSync( MyJSecretKeys.idx_LinkyPowerLoad,     "mqtt/bck_out", "Percentage" ),  
+                           new IDXtoSync( MyJSecretKeys.idx_LinkyUsageMeter,    "mqtt/bck_out", "kWh" ),
+                           new IDXtoSync( MyJSecretKeys.idx_UPSCharge,          "mqtt/bck_out", "Custom" ),
+                           new IDXtoSync( MyJSecretKeys.idx_UPSBackupTime,      "mqtt/bck_out", "Custom" ),
+                           new IDXtoSync( MyJSecretKeys.idx_UPSLoad,            "mqtt/bck_out", "Custom" ) ]; 
+
+// Main server devices to synchronize to this local backup server
 var   myIDXtoSync      = [ new IDXtoSync( 50, "mqtt/out", "Light/Switch" ),  new IDXtoSync( 51, "mqtt/out", "Light/Switch" ),  // 50/51=Entree and Mezzanine lighting 
                            new IDXtoSync( MyJSecretKeys.DZ_idx_SecPanel, "mqtt/in", "" ), // When main DZ down, to answer to Getsecpanel request like { "command" : "getdeviceinfo", "idx" : MyJSecretKeys.DZ_idx_SecPanel }
                            new IDXtoSync( MyJSecretKeys.idx_AlarmALERT, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_AlarmARM, "mqtt/in", "" ),  // Secpanel, Alarm Armed and Alarm Alert flags
@@ -384,7 +404,7 @@ var updateSecPanel = function( error, SecPanel, alarmToken ) {
 }; // var updateSecPanel = funct
 
 // *************** MAIN START HERE ***************
-console.log("\n*** " + new Date() + " - mtCluster V0.31 High Availability Domoticz Cluster starting ***");
+console.log("\n*** " + new Date() + " - mtCluster V0.41 High Availability Domoticz Cluster starting ***");
 console.log("mtCluster MQTT servers hardware  = " +  MyJSecretKeys.MAIN_SERVER_HARDWARE + " - " + MyJSecretKeys.BACKUP_SERVER_HARDWARE);
 console.log("mtCluster MQTT nodes address     = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
 console.log("mtCluster Domoticz nodes address = " +  M_JSON_API.host + ":" + M_JSON_API.port + " - " + L_JSON_API.host + ":" + L_JSON_API.port);
@@ -444,7 +464,7 @@ ActiveSvr.on('message', function (topic, message) {
         if( topic == 'domoticz/in' ) {  // Domoticz failover - We have to send every incoming messages to the backup Domoticz server
             PassiveSvr.publish('domoticz/in', message ); 
             if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Failover] Server: MAIN, Service: FAILOVER, Message from domoticz/in DUPLICATED TO BACKUP server: " + message.toString() );
-        } if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Failover] Server: MAIN, Service: FAILOVER, Message IGNORED from domoticz/out: " + message.toString() );
+        } else if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Failover] Server: MAIN, Service: FAILOVER, Message IGNORED from domoticz/out: " + message.toString() );
      } else {  
         // Cluster Normal Condition here
         // The reason to filter and so not republish all incoming messages is mainly for some actuators declared as outgoing message device in the repository, whose internal state changes by a Domoticz command or not. 
@@ -457,12 +477,19 @@ ActiveSvr.on('message', function (topic, message) {
         });    
      } //  if( dzFAILURE ) {
 }) // ActiveSvr.on('message', funct
-PassiveSvr.on('message', function (topic, message) {  // This one used for Domoticz Failover
-     if( !dzFAILURE || mqttFAILURE ) return;
+PassiveSvr.on('message', function (topic, message) {  // This one used for Main server synchronization or Domoticz Failover
      var JSONmessage=JSON.parse(message);
      message=message.toString();
-     ActiveSvr.publish('domoticz/out', message );  
-     if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Failover] Server: BACKUP, Service: FAILOVER, Message from domoticz/out DUPLICATED TO MAIN server: " + message);       
+     if( !dzFAILURE || mqttFAILURE ) { // Cluster Normal Condition here
+        if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: SYNC, Checking this message from " + topic.toString() + ": " + message ); 
+        var LIDXsmsg =  JSONmessage.idx;
+        myLIDXtoSync.forEach(function( value ) {
+          if ( LIDXsmsg === value.IDX ) value.DzSynchronize( topic, message );                 
+        });          
+     } else {  // Domoticz failover here
+        ActiveSvr.publish('domoticz/out', message );  
+        if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Failover] Server: BACKUP, Service: FAILOVER, Message from domoticz/out DUPLICATED TO MAIN server: " + message);       
+     } // if( !dzFAILURE || mqttFAILURE ) {
 }) // PassiveSvr.on('message', funct
 
 
