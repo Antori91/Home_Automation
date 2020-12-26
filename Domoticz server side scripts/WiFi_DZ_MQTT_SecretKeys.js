@@ -1,4 +1,6 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
+// V0.7/0.71 - December 2020
+// UPS and Linky meter added
 // V0.6 - March 2020
 // Dahua VTO/H and Alarm stationID added
 // V0.5 - April 2019
@@ -40,7 +42,13 @@ idx_FireAlarmHeatidx       : YY,                                 //[$$DOMOTICZ_P
 SVR_ALARM_SID              : '-----------',  // Alarm Server network SID
 DZ_ALARM_CID               : '-----------',  // Dz Alarm network CID
 VTH_ALARM_CID              : '-----------',  // VTH Alarm network CID
-VTO_ALARM_CID              : '-----------'   // VTO Alarm network CID
+VTO_ALARM_CID              : '-----------',  // VTO Alarm network CID
+idx_LinkyL1L2L3current     : YY,                                 //[$$DOMOTICZ_PARAMETER] - Linky current drawn for each phase
+idx_LinkyPowerLoad         : YY,                                 //[$$DOMOTICZ_PARAMETER] - Linky Power Load
+idx_LinkyUsageMeter        : YY,                                 //[$$DOMOTICZ_PARAMETER] - Linky usage meter (Base Tariff Option)
+idx_UPSCharge              : YY,                                 //[$$DOMOTICZ_PARAMETER] - UPS battery charge
+idx_UPSBackupTime          : YY,                                 //[$$DOMOTICZ_PARAMETER] - UPS backup time available
+idx_UPSLoad                : YY                                  //[$$DOMOTICZ_PARAMETER] - UPS Power Load
 };
 
 module.exports   = mySecretKeys;
