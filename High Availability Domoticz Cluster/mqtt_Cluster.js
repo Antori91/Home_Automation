@@ -2,6 +2,8 @@
 // ***** mtCluster:
 //        - High Availibilty Active/Passive Domoticz Cluster
 //        - Script for the Passive/Backup server *****
+// V0.50 - December 2020
+          // Improvement : increase stability against communication and security issues
 // V0.40/V0.41 - December 2020
           // New feature : Main server synchronization for some backup server devices (used for UPS and Linky smart meter devices)
 // V0.31 - April 2020
@@ -343,7 +345,12 @@ var MDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {
       });
       resp.on('end', function(ReturnData){ 
          if( VERBOSE ) console.log("\nMain DomoticZ answer=" + HttpAnswer);
-         if( callBack ) callBack( null, JSON.parse(HttpAnswer), _objectToCompute );
+         try { // To avoid crash if Domoticz returns a non JSON answer like <html><head><title>Unauthorized</title></head><body><h1>401 Unauthorized</h1></body></html>
+               if( callBack ) callBack( null, JSON.parse(HttpAnswer), _objectToCompute );
+         } catch (err) {
+               if( dzFAILUREcount === TIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: DOMOTICZ, Status: " + err.message + " - Can't reach DomoticZ with URL: " + savedURL ); 
+               callBack( err, null, _objectToCompute );
+         }  // try { // To avoid crash if D       
       });
    }).on("error", function(e){
          if( dzFAILUREcount === TIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: DOMOTICZ, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
@@ -365,7 +372,12 @@ var LDomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {
       });
       resp.on('end', function(ReturnData){ 
          if( VERBOSE ) console.log("\nBackup DomoticZ answer=" + HttpAnswer);
-         if( callBack ) callBack( null, JSON.parse(HttpAnswer), _objectToCompute );
+         try { // To avoid crash if Domoticz returns a non JSON answer like <html><head><title>Unauthorized</title></head><body><h1>401 Unauthorized</h1></body></html>
+               if( callBack ) callBack( null, JSON.parse(HttpAnswer), _objectToCompute );
+         } catch (err) {
+               if( LdzFAILUREcount === LTIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: DOMOTICZ, Status: " + err.message + " - Can't reach DomoticZ with URL: " + savedURL ); 
+               callBack( err, null, _objectToCompute );
+         }  // try { // To avoid crash if D      
       });
    }).on("error", function(e){
          if( LdzFAILUREcount === LTIMEOUT || VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: DOMOTICZ, Status: " + e.message + " - Can't reach DomoticZ with URL: " + savedURL );     
@@ -404,7 +416,7 @@ var updateSecPanel = function( error, SecPanel, alarmToken ) {
 }; // var updateSecPanel = funct
 
 // *************** MAIN START HERE ***************
-console.log("\n*** " + new Date() + " - mtCluster V0.41 High Availability Domoticz Cluster starting ***");
+console.log("\n*** " + new Date() + " - mtCluster V0.50 High Availability Domoticz Cluster starting ***");
 console.log("mtCluster MQTT servers hardware  = " +  MyJSecretKeys.MAIN_SERVER_HARDWARE + " - " + MyJSecretKeys.BACKUP_SERVER_HARDWARE);
 console.log("mtCluster MQTT nodes address     = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
 console.log("mtCluster Domoticz nodes address = " +  M_JSON_API.host + ":" + M_JSON_API.port + " - " + L_JSON_API.host + ":" + L_JSON_API.port);
