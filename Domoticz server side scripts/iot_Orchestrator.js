@@ -3,6 +3,9 @@
 //        - Manage Heaters and Heating Zones (Scheduled TOP Start/Stop),
 //        - Compute and log heaters characteristics,
 //        - Monitor ESP8266-ACS712/Heaters, ESP8266/Lighting and Raspberry/Alarm servers *****
+// V1.10 - January 2021
+           // Change (iot_AC712.js deleted) : Reset Heater meter POWER if Mqtt Will message received
+           // Improvement : increase stability against communication and security issues
 // V1.0  - March 2020
            // Monitor Dahua VTH box and secpanel. If failure, raise "Panne Alarme" - idxAlarmFailureFlag Dz device
 // V0.95 - April 2019
@@ -31,8 +34,6 @@
            // If failure, raise Alert in Dz ("Panne Domotique" - idxFailureFlag Dz device)
            // NEW FEATURE : For all heaters, based on ACS712 raw data, compute heaters characteristics : Min/Max/Average heater usage at Power On and Power off 
 // V0.1 - July 2017 
-           // Initial release - Monitor CAMPA heaters to know their actual nominal power (2000W or not)
-           // 1500 W Nominal Power ==> {"command" : "addlogmessage", "message" : "idx : 30, Vadc_Min/Max=375/814"} - 2000 W Nominal Power ==> {"command" : "addlogmessage", "message" : "idx : 30, Vadc_Min/Max=302/887"}
 
 const VERBOSE = false; // Detailed logging or not 
 if( process.argv[ 2 ] === 'RASPBERRY')                                                         // Unless otherwise specified 
@@ -41,6 +42,7 @@ else  MyJSecretKeys  = require('/volume1/@appstore/iot_domoticz/WiFi_DZ_MQTT_Sec
 const crypto         = require('crypto');  
 
 // ** Monitoring attributes **
+const HOTWATERTANK_OFFLINE = "HotWaterTank went Offline";
 const HEATER_OFFLINE       = "Heater went Offline";
 const LIGHTING_ONLINE      = "Lighting Online";
 const LIGHTING_OFFLINE     = "Lighting went Offline";
@@ -61,7 +63,7 @@ var   myVTHbox         = 0;  // VTH Box, 0=OK, 1=Failed less than 1 hour ago, 2=
 const HeatingTimer     = 60; // Send heating command to Heaters and Log latest heaters characteristics computed every n minutes
 
 // ** Domoticz Parameters and communication functions **
-var httpDomoticz = require('http');
+var http_Domoticz = require('http');
 var JSON_API     = {
 host: 'localhost',        
 port: MyJSecretKeys.DZ_PORT,
@@ -83,19 +85,31 @@ const idxUnactivateHeaters      = MyJSecretKeys.idx_UnactivateHeaters;      // D
 const Var_UnactiveHeaters       = MyJSecretKeys.Var_UnactiveHeaters;        // Dz user variable# to store the heaters heating state command
 const Varname_UnactiveHeaters   = MyJSecretKeys.Varname_UnactiveHeaters;    // Dz user variable name to store the heaters heating state command
 
-var DomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {     // Function to talk to DomoticZ. Do Callback if any 
-   var savedURL=JSON.stringify(JsonUrl);
+var DomoticzJsonTalk = function( JsonUrl, callBack, objectToCompute ) {    
+   var savedURL         = JSON.stringify(JsonUrl);                     
+   var _JsonUrl         = JSON.parse(savedURL);      // Function scope to capture values of JsonUrl and objectToCompute next line 
+   var _objectToCompute = "";
+   if( objectToCompute ) _objectToCompute = JSON.parse(JSON.stringify(objectToCompute));
    if( VERBOSE ) console.log("\n** DomoticZ URL request=" + savedURL );
-   httpDomoticz.get(JsonUrl, function(resp){
+   http_Domoticz.get(_JsonUrl, function(resp){
+      var HttpAnswer = "";
       resp.on('data', function(ReturnData){ 
-         if( VERBOSE ) console.log("\nDomoticZ answer=" + ReturnData);
-         if( callBack ) callBack( null, JSON.parse(ReturnData), objectToCompute );
+            HttpAnswer += ReturnData;
+      });
+      resp.on('end', function(ReturnData){ 
+         if( VERBOSE ) console.log("\nDomoticZ answer=" + HttpAnswer);
+         try { // To avoid crash if Domoticz returns a non JSON answer like <html><head><title>Unauthorized</title></head><body><h1>401 Unauthorized</h1></body></html>
+               if( callBack ) callBack( null, JSON.parse(HttpAnswer), _objectToCompute );
+         } catch (err) {
+               if( VERBOSE ) console.log("\n** Error - " + err.message + "\nError to parse DomoticZ answer to request URL:" + savedURL );
+               callBack( err, null, _objectToCompute );
+         }  // try { // To avoid crash if D       
       });
    }).on("error", function(e){
-         console.log("\n** Error - " + e.message + "\nCan't reach DomoticZ with URL:" + savedURL );     
-         if( callBack ) callBack( e, null, objectToCompute );
+         if( VERBOSE ) console.log("\n** Error - " + e.message + "\nCan't reach DomoticZ with URL:" + savedURL );
+         if( callBack ) callBack( e, null, _objectToCompute );
    });
-};   // function DomoticzJsonTalk( JsonUrl ) 
+};   // function DomoticzJsonTalk( JsonUrl )
 
 var signedAlarmRequest = function( error, SecPanel, alarmToken ) {
   if( error ) return;
@@ -166,7 +180,17 @@ function heater( MacAddress, IDX, Nominal, HeaterName, Zone1, Zone2 ) {
     this.Zone1 = Zone1; this.Zone2 = Zone2;    
     this.NumberOf_OFFRead = 0; this.OFF_VadcMin = 1024; this.OFF_VadcMax = 0; this.OFF_PowerAverage = 0; this.OFF_PowerMin = Nominal;     this.OFF_PowerMax = 0;
     this.NumberOf_ONRead = 0;  this.ON_VadcMin  = 1024; this.ON_VadcMax  = 0; this.ON_PowerAverage  = 0; this.ON_PowerMin  = 2 * Nominal; this.ON_PowerMax  = 0;
-    this.RaiseFaultFlag = function() { this.DeviceFault = 1; } // 0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised 
+    this.RaiseFaultFlag = function() {                
+           this.DeviceFault = 1;  // 0=OK, 1=Failed less than 1 hour ago, 2=Failed more than 1 hour ago (i.e alert to raise), 3=Alert already raised
+           JSON_API.path = '/json.htm?type=devices&rid=' + this.IDX; // Reset Power for this heater
+           DomoticzJsonTalk( JSON_API, function(error, data, idx ) {   
+                    if( error ) return;
+                    var Meter = data.result[0].Data.split(";"); 		
+                    if( VERBOSE ) console.log("Heater: " + data.result[0].Name + " - Usage1/Usage2//Power (Wh/Wh//W)=" + Meter[0] + "/" + Meter[1] + "//" + Meter[4] );
+                    JSON_API.path = '/json.htm?type=command&param=udevice&idx=' +  idx + '&nvalue=0&svalue=' + Meter[0] + ';' + Meter[1] + ';0;0;0;0';
+                    DomoticzJsonTalk( JSON_API );      
+           }, this.IDX ); // DomoticzJsonTalk( JSON_API, function(e
+    }  // this.RaiseFaultFlag = function(
     this.log = function(Vadc_Min, Vadc_Max) {
            this.DeviceFault = 0;  // Reset the error flag, we received a message from this heater 
            var HeaterPower = parseInt( 230 * ( ( 4.3 * 0.707 * ( (Vadc_Max - Vadc_Min) / 2 ) / 1024  ) / 0.100 ) );
@@ -192,8 +216,8 @@ var   myHeaters        = [ new heater("3A73F0", 28, 1426, "ENTREE", "10", "40" )
                            new heater("9497B1", -1, 500,  "SDB", "80", "100"),        new heater("65DEF6", 38, 1442, "PARENTAL", "90", "100"),   new heater("412A10", 34, 1603, "ECS", "-1", "-1") ];
                            
 // *************** MAIN START HERE ***************
-if( process.argv[ 2 ] === 'RASPBERRY') console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v1.0 starting - Server platform set to RASPBERRY ***\n");
-else console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v1.0 starting - Server platform set to SYNOLOGY ***\n");
+if( process.argv[ 2 ] === 'RASPBERRY') console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v1.10 starting - Server platform set to RASPBERRY ***\n");
+else console.log("*** " + new Date() + " - Domoticz iot_Orchestrator v1.10 starting - Server platform set to SYNOLOGY ***\n");
 
 // Get from Dz the latest heating command saved and display it 
 JSON_API.path = '/json.htm?type=command&param=getuservariable&idx=' + Var_UnactiveHeaters;
@@ -212,10 +236,10 @@ setInterval(function(){
     var heaterFailure = false;  // false=No heater has failed, true=One heater at least has failed. This flag is to avoid a flood of sms/email alerts because all heaters were shut off or all lost MQTT 
     
     // Send to heaters and log/display the latest heating state command
-    console.log("\n*** " + new Date() + " - HEATERS CHARACTERISTICS UPDATE:");
-    myHeaters.forEach( function( value ) { console.log(value) } );
-    console.log("\n*** " + new Date() + " - HEATERS HEATING STATE:");
-    console.log(HeatingStatus);  // Log the heating state
+    if( VERBOSE ) console.log("\n*** " + new Date() + " - HEATERS CHARACTERISTICS UPDATE:");
+    if( VERBOSE ) myHeaters.forEach( function( value ) { console.log(value) } );
+    if( VERBOSE ) console.log("\n*** " + new Date() + " - HEATERS HEATING STATE:");
+    if( VERBOSE ) console.log(HeatingStatus);  // Log the heating state
     client.publish('heating/out', HeatingStatus);   // Send the heating state command to all the heaters
     JSON_API.path = '/json.htm?type=command&param=udevice&idx=' + idxUnactiveHeatersDisplay + '&nvalue=0&svalue=' + HeatingStatusTxt;   // Dispay it at Dz side
     JSON_API.path = JSON_API.path.replace(/ /g,"%20");
@@ -350,7 +374,7 @@ client.on('message', function (topic, message) {
           DomoticzJsonTalk( JSON_API );
      }  // if( hzoneModified ) { 
      
-     // *** Message coming from Heater/ACS712, Lighting or Alarm-Svr 
+     // *** Message coming from Heater/ACS712, VTH, Lighting or Alarm-Svr 
      if( message.indexOf("addlogmessage") != -1 ) { 
         // ligthing message
         if( VERBOSE ) console.log("Checking for LIGHTING event...");
@@ -423,18 +447,16 @@ client.on('message', function (topic, message) {
         // heater message        
         if( VERBOSE ) console.log("Checking for Heater event...");
         var pos = message.indexOf(HEATER_OFFLINE);
-        if( pos != -1 )  { // Raise alert, MQTT said this one is dead !
-            console.log("\n*** " + new Date() + " == HEATER FAILURE ==");
-            console.log( message + "\n");
+        if( pos === -1 ) pos = message.indexOf(HOTWATERTANK_OFFLINE);    
+        if( pos != -1 )  { // Raise alert, MQTT said a heater is dead !
             pos = message.indexOf("@192");
             var mac6 = message.slice(pos-6,pos);
-            if( VERBOSE ) console.log( "Heater Offline - mac6 = " + mac6 + "\n");
-            myHeaters.forEach(function( value ) { 
+            myHeaters.forEach(function( value ) {
                   if( value.MacAddress === mac6 ) {
-                      if( VERBOSE ) console.log("Internal Device Fault raised for this IDX/MacAddress heater = " +  value.IDX + "/" + value.MacAddress );
+                      console.log("\n*** " + new Date() + " == HEATER FAILURE: ID/IDX/MAC=" + value.HeaterName + "/" + value.IDX + "/" + value.MacAddress + " ==");
                       value.RaiseFaultFlag();
                   } // if( value.MacAddress === mac6 ) {   
-            }); // myHeaters.forEach(function( v                                 
+            }); // myHeaters.forEach(function( value ) {      
         } else { // Non heater failure message
             var IDXsmsg;
             myHeaters.forEach(function( value ) {
