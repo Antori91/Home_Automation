@@ -4,7 +4,7 @@
 Author: Antori91 -- http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 DHIP/DVRIP routines -- https://github.com/mcw0/Tools/blob/master/Dahua-JSON-Debug-Console-v2.py
 Subject: Dahua VTH used as Security Panel to arm/disarm an external non Dahua Alarm Appliance
-V0.20/V0.15 - May 2020
+V0.21/V0.20/V0.15 - May/July 2020
       - Improve handling of communication issues 
 V0.12 - April 2020 
       - Watchdog implementation
@@ -43,7 +43,7 @@ global verbose
 verbose = False
 
 SECURITY_BREACH      = 255
-WATCHDOG_RESET       = 1200 # If P2P or MQTT failure for such time period in s, program terminates 
+WATCHDOG_RESET       = 7200 # If P2P or MQTT failure for such time period in s, program terminates 
 MAX_FAILED_KEEPALIVE = 180  # If VTH keepAlive failure for such time period in s, new VTH session is initiated
 NORMAL_TERMINATION   = 0
 WATCHDOG_TERMINATION = 1
@@ -88,8 +88,9 @@ class _Watchdog:
         stop_threads = True
         if not coldBootP2P and not Dahua.lock.locked(): P2P_timeout_Thread.join()
         if Dahua.VTH_ON_LINE == 0 and not Dahua.SERVICE_SUSPENDED: Dahua.logout()
-        while Dahua.SERVICE_SUSPENDED: # to avoid program respawn
+        if Dahua.SERVICE_SUSPENDED: 
             time.sleep( 3600 )
+            os._exit(SECURITY_BREACH)
         #if Dahua.socket_event.is_set(): time.sleep(WATCHDOG_RESET) # Network issue. Happen with some VTO calls. VTH is back after a few minutes
         if Dahua.lock.locked(): os._exit(WATCHDOG_TERMINATION)
 
@@ -962,7 +963,7 @@ class Dahua_Functions:
 if __name__ == '__main__':
 
 
-    INFO = "[" + str(datetime.datetime.now()) + " iot_Dahua_VTH_SecPanel V0.20 starting]"
+    INFO = "[" + str(datetime.datetime.now()) + " iot_Dahua_VTH_SecPanel V0.21b starting]"
     
     AlarmProfile    = { 0: "AlarmDisable", 9: "Outdoor", 11: "AtHome" }             # DZ SecPanel to corresponding VTH AlarmEnable/profile
     VTHAlarmProfile = { "Outdoor": 9, "AtHome": 11, "Sleeping": 11, "Custom": 11 }  # VTH to corresponding DZ SecPanel for VTH AlarmEnable=True       
@@ -1034,6 +1035,9 @@ if __name__ == '__main__':
                     log.success( "[" + str(datetime.datetime.now()) + " VTH-P2P_OK] CONNECTED to VTH BOX" )
                     if Dahua.VTH_GetSecPanel():   
                         if Dahua.VTH_GetSecPanelChange():
+                            if P2PerrorLogged:
+                                GetDZSecPanelThread=Thread( target=GetDZSecPanel, args=("GetDZSecPanel", 30,) )
+                                GetDZSecPanelThread.start() 
                             P2PerrorLogged = False
                             coldBootP2P    = False
                 else:         
