@@ -112,7 +112,7 @@ float           SmokeCurve[3] = {2.3,0.53,-0.44};   // Smoke data { x, y, slope}
 float           Ro                    = 10;         // Ro is initialized to 10 kilo ohms
 int             MQ2_Raw_adc           = 0;          // Last MQ-2 ADC reading
 float           Smoke                 = 0;          // Max MQ-2 smoke computed value for the last minute
-int             Smoke_alert_threshold = SMOKE_ALERT;// Smoke ppm threshold to detect potential fire! Threshold can be change on the fly using Domoticz device name (dz_FIREALARM_SWITCH_IDX): D�tection INCENDIE{threshold to use} 
+int             Smoke_alert_threshold = SMOKE_ALERT;// Smoke ppm threshold to detect potential fire! Threshold can be change on the fly using Domoticz device name (dz_FIREALARM_SWITCH_IDX): Detection INCENDIE{threshold to use} 
 boolean         MQ2calibration        = false;      // MQ2 calibration just done. Result has to be logged in Domoticz
 
 // Compute current sensor resistance
