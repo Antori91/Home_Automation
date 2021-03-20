@@ -10,7 +10,7 @@
 //          Relay1 used to run the siren (230 AC to +12V adapter)        
 //  V0.20 - March 2021
 //        New configuration in addition to KD5810 smoke detector appliance supported: MQ-2 sensor and standalone alarm siren
-//        RL_VALUE of 0.66 kilo ohm used to apply a maximum around 1V at the ESP8266 ADC input 
+//        RL_VALUE of 0.66 kilo ohm used to get around 1V maximum to the ESP8266 ADC pin 
 //        MQ-2 core routines: Tiequan Shao (http://sandboxelectronics.com/?p=165) - 
 //        MQ-2 core routines changes: ESP8266 ADC parameters (MQ-2 VCC = 5*1023) and log10 used to compute ppm from the sensitivity characteristics 
 //  V0.12 - April 2019
