@@ -2,6 +2,8 @@
 // ***** mtCluster:
 //        - High Availibilty Active/Passive Domoticz Cluster
 //        - Script for the Passive/Backup server *****
+// V0.51 - March 2021
+          // Fire Alarm Smoke sensor added to the repository
 // V0.50 - December 2020
           // Improvement : increase stability against communication and security issues
 // V0.40/V0.41 - December 2020
@@ -156,7 +158,7 @@ var   myIDXtoSync      = [ new IDXtoSync( 50, "mqtt/out", "Light/Switch" ),  new
                            new IDXtoSync( 34, "mqtt/in", ""),   // 34=Hot Water Tank
                            new IDXtoSync( 27, "mqtt/in", "" ),  new IDXtoSync( 28, "mqtt/in", "" ),   new IDXtoSync( 29, "mqtt/in", ""), new IDXtoSync( 30, "mqtt/in", "" ),   new IDXtoSync( 31, "mqtt/in", ""),   // Ground Floor Heaters
                            new IDXtoSync( 35, "mqtt/in", "" ),  new IDXtoSync( 36, "mqtt/in", "" ),   new IDXtoSync( 37, "mqtt/in", ""), new IDXtoSync( 38, "mqtt/in", "" ),   // First Floor Heaters   
-                           new IDXtoSync( MyJSecretKeys.idx_FireAlarmTempHum, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_FireAlarmHeatidx, "mqtt/in", "" ), // Temp sensor of Fire Alarm server
+                           new IDXtoSync( MyJSecretKeys.idx_FireAlarmTempHum, "mqtt/in", "" ),  new IDXtoSync( MyJSecretKeys.idx_FireAlarmHeatidx, "mqtt/in", "" ), new IDXtoSync( MyJSecretKeys.idx_FireAlarmSmokeidx, "mqtt/in", "" ), // Temp and smoke sensors of Fire Alarm server
                            new IDXtoSync( MyJSecretKeys.idx_FireALarmStatus, "mqtt/out", "SelectorSwitch" ), // Fire Alarm server status
                            new IDXtoSync( MyJSecretKeys.idx_SecPanel, "mqtt/out", "Secpanel" ), // When main DZ up, backup server Secpanel synchro when receiving Alarm request MD5 signed message
                            new IDXtoSync( 17, "mqtt/out", "SelectorSwitch" ), new IDXtoSync( 16, "mqtt/out", "Thermostat" ) ];   //  17=Main heating breaker (OFF/HORSGEL/ECO/CONFORT), 16=Heating thermostat setpoint
@@ -416,7 +418,7 @@ var updateSecPanel = function( error, SecPanel, alarmToken ) {
 }; // var updateSecPanel = funct
 
 // *************** MAIN START HERE ***************
-console.log("\n*** " + new Date() + " - mtCluster V0.50 High Availability Domoticz Cluster starting ***");
+console.log("\n*** " + new Date() + " - mtCluster V0.51 High Availability Domoticz Cluster starting ***");
 console.log("mtCluster MQTT servers hardware  = " +  MyJSecretKeys.MAIN_SERVER_HARDWARE + " - " + MyJSecretKeys.BACKUP_SERVER_HARDWARE);
 console.log("mtCluster MQTT nodes address     = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
 console.log("mtCluster Domoticz nodes address = " +  M_JSON_API.host + ":" + M_JSON_API.port + " - " + L_JSON_API.host + ":" + L_JSON_API.port);
