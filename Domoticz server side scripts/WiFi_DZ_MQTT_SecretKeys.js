@@ -1,4 +1,8 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
+// V0.81 - March 2021
+// Fire Alarm Smoke IDX added
+// V0.8 - January 2021
+// Various Temp devices added
 // V0.7/0.71 - December 2020
 // UPS and Linky meter added
 // V0.6 - March 2020
@@ -17,10 +21,22 @@ MAIN_SERVER_SSH_USER       : '---------',     // Main Domoticz server SSH User
 MAIN_SERVER_ROOT_PWD       : '-----------',   // Main Domoticz server root Password
 BACKUP_SERVER_HARDWARE     : 'RASPBERRY',     // Backup Domoticz server Hardware
 BACKUP_SERVER_IP           : '192.168.Y.YYY', // Backup Domoticz server IP address
+INDOOR_ESP8266_DHT22       : '192.168.Y.YYY', // Internal Temp sensor IP address
+OUTDOOR_ESP8266_DHT22      : '192.168.Y.YYY', // OutdoorTemp sensor IP address
+TEMP_ESP8266_DHT22_PORT    :  YYYY,           // Temp sensor HTTP port
 DZ_PORT                    :  YYYY,           // Domoticz IP port         
 DZ_IN_TOPIC                : '-----------',   // Domoticz In mqtt topic
 DZ_OUT_TOPIC               : '-----------',   // Domoticz Out mqtt topic
-MQTT_PORT                  :  YYYY,           // Mqtt IP port         
+MQTT_PORT                  :  YYYY,           // Mqtt IP port   
+idx_IndoorTempHum          : 'YY',                               //[$$DOMOTICZ_PARAMETER] - Internal Temp sensor temp/humidity device IDX
+idx_IndoorHeatidx          : 'YY',                               //[$$DOMOTICZ_PARAMETER] - Internal Temp sensor heat index device IDX
+idx_OutdoorTempHum         : 'YY',                               //[$$DOMOTICZ_PARAMETER] - External Temp sensor temp/humidity device IDX
+idx_OutdoorHeatidx         : 'YY',                               //[$$DOMOTICZ_PARAMETER] - External Temp sensor heat index device IDX
+idx_ElecTariff             : 'YY',                               //[$$DOMOTICZ_PARAMETER] - Current Electricity tariff used device IDX
+idx_Thermostat_setPoint    : 'YY',                               //[$$DOMOTICZ_PARAMETER] - House Main Temp setpoint device IDX
+idx_ThermalLoss            : 'YY',                               //[$$DOMOTICZ_PARAMETER] - House Thermal Loss device IDX
+idx_CoolingRate            : 'YY',                               //[$$DOMOTICZ_PARAMETER] - House Cooling Rate device IDX
+idx_DJUTemp                : 'YY',                               //[$$DOMOTICZ_PARAMETER] - DegreeDays device IDX      
 idxClusterFailureFlag      : 'YY',                               //[$$DOMOTICZ_PARAMETER] - General Home Automation Failure status (i.e. Hardware Server, Dz, Mqtt, ... ) - Dz "Panne Domotique" Device
 idx_AlarmFailureFlag       : 'YY',                               //[$$DOMOTICZ_PARAMETER] - Alarm Failure status - Dz "Panne Alarme" Device
 idx_TempFailureFlag        : 'YY',                               //[$$DOMOTICZ_PARAMETER] - Temp sensors Failure status - Dz "Panne Sondes Temperature" Device 
@@ -39,6 +55,7 @@ idx_AlarmARM               : YY,                                 //[$$DOMOTICZ_P
 idx_FireALarmStatus        : YY,                                 //[$$DOMOTICZ_PARAMETER] - Fire Alarm device IDX (Selector)
 idx_FireAlarmTempHum       : YY,                                 //[$$DOMOTICZ_PARAMETER] - Fire Alarm temp/humidity device IDX
 idx_FireAlarmHeatidx       : YY,                                 //[$$DOMOTICZ_PARAMETER] - Fire Alarm temp heat index device IDX
+idx_FireAlarmSmokeidx      : YY,                                 //[$$DOMOTICZ_PARAMETER] - Fire Alarm smoke device IDX
 SVR_ALARM_SID              : '-----------',  // Alarm Server network SID
 DZ_ALARM_CID               : '-----------',  // Dz Alarm network CID
 VTH_ALARM_CID              : '-----------',  // VTH Alarm network CID
