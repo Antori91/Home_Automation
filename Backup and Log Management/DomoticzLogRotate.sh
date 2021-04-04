@@ -47,5 +47,5 @@ echo -e "==\n== ALARM SERVER WARNING/ERROR EVENTS ==\n==" >> /volume1/Alarme/Dom
 # /bin/grep -h -r -e RECONNECT /volume1/Alarme/iot_CVQ6081-SecPanel >> /volume1/Alarme/DomoticZ/domoticzEvents.log
 # /bin/grep -i -e ERROR /volume1/Alarme/RaspberrySamba/iot_CVQ6081.log >> /volume1/Alarme/DomoticZ/domoticzEvents.log
 # cat /volume1/Alarme/RaspberrySamba/*.pubnub.log >> /volume1/Alarme/DomoticZ/domoticzEvents.log
-logrotate ./DomoticzLogRotate.conf -v -f
+logrotate ./DomoticzLogRotate.conf -v
 
