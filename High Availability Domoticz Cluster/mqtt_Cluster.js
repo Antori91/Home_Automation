@@ -1,7 +1,10 @@
 // @Antori91  http://www.domoticz.com/forum/memberlist.php?mode=viewprofile&u=13749
 // ***** mtCluster:
 //        - High Availibilty Active/Passive Domoticz Cluster
+//        - Devices synchronization between Main and Backup Domoticz nodes
 //        - Script for the Passive/Backup server *****
+// V0.60 - April 2021
+          // Improvement : Restart also non Backup Domoticz instance operational 
 // V0.51 - March 2021
           // Fire Alarm Smoke sensor added to the repository
 // V0.50 - December 2020
@@ -86,6 +89,7 @@ if( MyJSecretKeys.MAIN_SERVER_HARDWARE === 'RASPBERRY' ) {
 }
 const DZ_COMPLETION      = 25000; // Duration in ms to wait for Domoticz shutdown or restart command completion. MUST BE SET LESS THAN HeartbeatTimer/2 
 var DZ_RECOVER_SUCCESS   = -1; // -1 = Unknwon, 0 = KO, 1 = OK
+var LDZ_RECOVER_SUCCESS  = -1; // -1 = Unknwon, 0 = KO, 1 = OK
 
 function newIP( newIPaddress ) {
   const { spawn } = require('child_process');
@@ -96,6 +100,14 @@ function newIP( newIPaddress ) {
   ifconfig.on('close', (code)       => { console.log(`child process exited with code ${code}`); console.log("}"); });
 }  // function newIP( newIPaddress ) {   
 
+function RestartLocalDomoticz() {
+  console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: DOMOTICZ, Status: OFF LINE - TRYING TO RESTART");
+  const { spawn } = require('child_process');
+  const dzRestart = spawn('sudo', ['/etc/init.d/domoticz.sh', 'restart']);  
+  dzRestart.stdout.on('data', (data) => { console.log(`stdout: ${data}`); });
+  dzRestart.stderr.on('data', (data) => { console.log(`stderr: ${data}`); });
+  dzRestart.on('close', (code)       => { console.log(`child process exited with code ${code}`); console.log("}"); });
+} // function RestartLocalDomoticz() {
 
 function IDXtoSync( IDX, DataSource, DeviceType ) {  // Object to synchronize Domoticz Idx  
     // IDX = Domoticz IDX
@@ -194,7 +206,7 @@ setInterval(function(){ // Backup Domoticz Heartbeat
    if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, DzHEARTBEAT TimeToken: " + LdzFAILUREcount ); 
    L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
    L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
-   LDomoticzJsonTalk( L_JSON_API, LdzStatus );   
+   LDomoticzJsonTalk( L_JSON_API, LdzFailover );   
 }, HeartbeatTimer*60000); // 
 
 var dzFailover   = function( error, data ) { // dzFailover
@@ -262,18 +274,24 @@ var dzFailover   = function( error, data ) { // dzFailover
    }  // if( dzFAILUREcount < 0 ) { 
 };
 
-var LdzStatus = function( error, data ) { // LdzStatus
+var LdzFailover = function( error, data ) { 
    if( !error ) {
+      LDZ_RECOVER_SUCCESS = -1; 
       if( LdzFAILURE ) { 
          LdzFAILURE = false;
-         console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, Status: ON LINE - DZ HAS BEEN RECOVERED");
+         LDZ_RECOVER_SUCCESS = 1;
+         console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, Status: ON LINE - MANUAL RESTART");
       }
-      else if( dzStatus || LdzFAILUREcount < LTIMEOUT ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, Status: ON LINE");   
+      else if( dzStatus || ( LdzFAILUREcount > 0 &&  LdzFAILUREcount < LTIMEOUT ) ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: DOMOTICZ, Status: ON LINE"); 
+           else if( LdzFAILUREcount === 0 ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: DOMOTICZ, Status: ON LINE - AUTOMATIC RESTART HAPPENED");
       dzStatus = false;
       LdzFAILUREcount = LTIMEOUT;    
       return;
    } // if( !error ) {   
-   if( --LdzFAILUREcount === 0 ) {  
+   if( --LdzFAILUREcount === 0 ) RestartLocalDomoticz();  
+   if( LdzFAILUREcount < 0 ) {  
+      if( LDZ_RECOVER_SUCCESS === 0 ) return;
+      LDZ_RECOVER_SUCCESS = 0;
       LdzFAILURE = true; 
       dzStatus = true;
       M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag; // Signal the failure using Domoticz at the main server
@@ -281,7 +299,7 @@ var LdzStatus = function( error, data ) { // LdzStatus
       MDomoticzJsonTalk( M_JSON_API, MRaisefailureFlag );     
       console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: BACKUP, Service: DOMOTICZ, Status: DOWN"); 
    } // if( --ldzFAILUREcount === 0
-};
+};  
 
 setInterval(function( ) { // Main server Mqtt Heartbeat and failover 
    if( mqttFAILURE ) return;  
@@ -418,7 +436,7 @@ var updateSecPanel = function( error, SecPanel, alarmToken ) {
 }; // var updateSecPanel = funct
 
 // *************** MAIN START HERE ***************
-console.log("\n*** " + new Date() + " - mtCluster V0.51 High Availability Domoticz Cluster starting ***");
+console.log("\n*** " + new Date() + " - mtCluster V0.60 High Availability Domoticz Cluster starting ***");
 console.log("mtCluster MQTT servers hardware  = " +  MyJSecretKeys.MAIN_SERVER_HARDWARE + " - " + MyJSecretKeys.BACKUP_SERVER_HARDWARE);
 console.log("mtCluster MQTT nodes address     = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
 console.log("mtCluster Domoticz nodes address = " +  M_JSON_API.host + ":" + M_JSON_API.port + " - " + L_JSON_API.host + ":" + L_JSON_API.port);
