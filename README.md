@@ -13,6 +13,7 @@ Powerful and low price sensors/actuators. Tailored solution leveraging existing 
   - Domoticz High Availability Cluster : Synology Dz V4.10693 (Main) - Raspberry Dz V4.10717 (Backup) - Node.js scripts
   - Alarm server : Raspberry - motionEye - iot_ALARM-SVR Node.js script
   - Temperature Sensors and Lighting/Heaters Actuators : ESP8266 (Standalone ESP-12E and Electrodragon IoT ESP8266 Relay Board) - Arduino sketches
+  - Dahua doorbell using VTO and VTH modules
   - Communication protocol : MQTT
 
 ![Landscape Architecture](https://github.com/Antori91/Home_Automation/blob/master/Architecture%20Overview.GIF)
