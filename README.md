@@ -7,6 +7,7 @@ Powerful and low price sensors/actuators. Tailored solution leveraging existing 
   - Legacy wired alarm appliance go to Internet. Dahua VTH and Domoticz SecPanel sychronized together to arm/disarm the alarm
   - Cameras and motion detection with motionEye. End to end communication between motionEye and Domoticz 
   - Ligthing management reusing existing latching relays and wall pushbuttons
+  - Versatile FireAlarm server using MQ-2 sensor
   - Robust implementation with two Domoticz synchronized servers (failover cluster) and alerting on sensors/actuators failure 
 
 ## Architecture:
