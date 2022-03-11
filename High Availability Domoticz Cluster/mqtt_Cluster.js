@@ -3,6 +3,11 @@
 //        - High Availibilty Active/Passive Domoticz Cluster
 //        - Devices synchronization between Main and Backup Domoticz nodes
 //        - Script for the Passive/Backup server *****
+// V0.70 - February 2022
+          // Improvement : increase stability against communication issues (Internet Box/Router unavailable for a long time)
+          // Orange LIVEBOX Ethernet LAN Failure Condition :
+          //        - Detection : Ping Livebox when Mqtt goes off line 
+          //        - Action : Stop Mqtt heartbeat/failover until network back
 // V0.60 - April 2021
           // Improvement : Restart also non Backup Domoticz instance operational 
 // V0.51 - March 2021
@@ -52,6 +57,7 @@ const VERBOSE          = false; // Detailed logging or not
 const MyJSecretKeys    = require('/home/pi/iot_domoticz/WiFi_DZ_MQTT_SecretKeys.js');
 var SSHclient          = require('ssh2').Client;
 const crypto           = require('crypto');  
+var   ping             = require ("net-ping"); // Unless user privilege, this module requires to run node with sudo ...
 
 // SECpanel Status 
 const MSECPANEL_DISARM           = 0;    // using MQTT
@@ -60,6 +66,10 @@ const MSECPANEL_ARM_AWAY         = 9;
 const JSECPANEL_DISARM           = 0;    // using JSON
 const JSECPANEL_ARM_HOME         = 1;
 const JSECPANEL_ARM_AWAY         = 2;
+
+// Network heartbeat parameters
+const WAN_ROUTER         = "192.168.1.1"; // Box to ping to check network avaibility
+var   Network_FAILURE    =  0;            // 0 = No Failure, more than 1 = number of errors detected in a row
 
 // MQTT Cluster Parameters       
 const MQTT_ACTIVE_SVR    = 'mqtt://' + MyJSecretKeys.MAIN_SERVER_IP;   
@@ -195,6 +205,7 @@ path: '/'
 
 setInterval(function(){ // Main Domoticz Heartbeat
    // if( dzFAILURE ) return;
+   if( Network_FAILURE > 0 || mqttTROUBLE ) return;  // Wait until LAN network is back to check the Main Domoticz - Main Domoticz failover must not happen if main MQTT is not up and running  
    if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: DOMOTICZ, DzHEARTBEAT TimeToken: " + dzFAILUREcount ); 
    M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
    M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
@@ -304,34 +315,47 @@ var LdzFailover = function( error, data ) {
 setInterval(function( ) { // Main server Mqtt Heartbeat and failover 
    if( mqttFAILURE ) return;  
    if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: MQTT, MqttHEARTBEAT TimeToken: " + mqttFAILUREcount ); 
-   if( mqttTROUBLE ) 
-      if( --mqttFAILUREcount <= 0 ) {   
-          mqttFAILURE = true;
-          if( !LdzFAILURE ) { 
-             L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
-             L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
-             LDomoticzJsonTalk( L_JSON_API, RaisefailureFlag );
-          } else {
-             M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
-             M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
-             MDomoticzJsonTalk( M_JSON_API, MRaisefailureFlag );
-          }  // if( !LdzFAILURE ) { 
-          // Kill Main Domoticz server - NOT IMPLEMENTED YET : we assume MQTT went down because the main server went down 
-          // M_JSON_API.path = '/json.htm?type=command&param=system_shutdown';
-          // M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
-          // MDomoticzJsonTalk( M_JSON_API ); 
-          // Wait 5s to be sure all current (HTTP) requests complete. Then Stop MQTT here and become the main server ! 
-          setTimeout(function( ){
-             ActiveSvr.end(true);
-             PassiveSvr.end(true);
-             newIP( MyJSecretKeys.MAIN_SERVER_IP );
-             console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: MAIN, Service: FAILOVER, Status: DZ AND MQTT FAILOVER HAS BEEN STARTED USING BACKUP SERVER");
-          }, 5000 );
-      } // if( --mqttFAILUREcount <= 0 ) {
+   if( mqttTROUBLE ) {
+       // Check LAN network avaibility (i.e router/internet box available)
+       var session = ping.createSession ();
+       session.pingHost (WAN_ROUTER, function (error, WAN_ROUTER) {
+           if ( error ) {
+                if( Network_FAILURE === 0 ) console.log("\n[" + new Date() + " mtCluster-Network_FAILURE] " + error.toString ());
+                Network_FAILURE++;
+           } else {
+                if( Network_FAILURE > 0 ) console.log( "\n[" + new Date() + " mtCluster-Network_Ready]" );
+                Network_FAILURE=0;         
+           }   
+       }); // session.pingHost (WAN_ROUTER, function (e   
+       if( Network_FAILURE > 0 ) return; // Don't do the failover if there is no LAN network (i.e the issue is not the Main server)
+       if( --mqttFAILUREcount <= 0 ) {   
+            mqttFAILURE = true;
+            if( !LdzFAILURE ) { 
+               L_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
+               L_JSON_API.path = L_JSON_API.path.replace(/ /g,"");
+               LDomoticzJsonTalk( L_JSON_API, RaisefailureFlag );
+            } else {
+               M_JSON_API.path = '/json.htm?type=devices&rid=' + MyJSecretKeys.idxClusterFailureFlag;
+               M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
+               MDomoticzJsonTalk( M_JSON_API, MRaisefailureFlag );
+            }  // if( !LdzFAILURE ) { 
+            // Kill Main Domoticz server - NOT IMPLEMENTED YET : we assume MQTT went down because the main server went down 
+            // M_JSON_API.path = '/json.htm?type=command&param=system_shutdown';
+            // M_JSON_API.path = M_JSON_API.path.replace(/ /g,"");
+            // MDomoticzJsonTalk( M_JSON_API ); 
+            // Wait 5s to be sure all current (HTTP) requests complete. Then Stop MQTT here and become the main server ! 
+            setTimeout(function( ){
+               ActiveSvr.end(true);
+               PassiveSvr.end(true);
+               newIP( MyJSecretKeys.MAIN_SERVER_IP );
+               console.log("\n[" + new Date() + " mtCluster-FAILURE] Server: MAIN, Service: FAILOVER, Status: DZ AND MQTT FAILOVER HAS BEEN STARTED USING BACKUP SERVER");
+            }, 5000 ); 
+       } // if( --mqttFAILUREcount <= 0 ) {
+   } // if( mqttTROUBLE ) {
 }, HeartbeatTimer*60000); //
 
 setInterval(function( ) { // Backup server Mqtt Heartbeat
-   if( LmqttFAILURE ) return;  
+   if( LmqttFAILURE || mqttFAILURE ) return; // Don't signal issue if already and there is no issue if Main server failover happened (i.e. mqttFAILURE=true)  
    if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: MQTT, MqttHEARTBEAT TimeToken: " + LmqttFAILUREcount ); 
    if( LmqttTROUBLE ) 
       if( --LmqttFAILUREcount <= 0 ) {   
@@ -436,7 +460,7 @@ var updateSecPanel = function( error, SecPanel, alarmToken ) {
 }; // var updateSecPanel = funct
 
 // *************** MAIN START HERE ***************
-console.log("\n*** " + new Date() + " - mtCluster V0.60 High Availability Domoticz Cluster starting ***");
+console.log("\n*** " + new Date() + " - mtCluster V0.70 High Availability Domoticz Cluster starting ***");
 console.log("mtCluster MQTT servers hardware  = " +  MyJSecretKeys.MAIN_SERVER_HARDWARE + " - " + MyJSecretKeys.BACKUP_SERVER_HARDWARE);
 console.log("mtCluster MQTT nodes address     = " +  MQTT_ACTIVE_SVR + " - " + MQTT_PASSIVE_SVR);
 console.log("mtCluster Domoticz nodes address = " +  M_JSON_API.host + ":" + M_JSON_API.port + " - " + L_JSON_API.host + ":" + L_JSON_API.port);
@@ -450,17 +474,17 @@ var PassiveSvr  = PassiveMqtt.connect( MQTT_PASSIVE_SVR );
 
 // MQTT Error events
 ActiveSvr.on(  'error', function ()  { 
-   console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: MQTT, Status: CAN'T CONNECT to MQTT at boot");
+   console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: MQTT, Status: CAN'T CONNECT to MQTT");
    mqttTROUBLE = true; })     // Emitted when the client cannot connect (i.e. connack rc != 0) 
 PassiveSvr.on( 'error', function ()  {
-   console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: MQTT, Status: CAN'T CONNECT to MQTT at boot"); 
+   console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: MQTT, Status: CAN'T CONNECT to MQTT"); 
    LmqttTROUBLE = true; })
 
 ActiveSvr.on(  'close', function ()  { 
-   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: MQTT, Status: DOWN");
+   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: MQTT, Status: DISCONNECTED due to logoff");
    mqttTROUBLE = true; })     // Emitted after a disconnection  
 PassiveSvr.on( 'close', function ()  { 
-   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-ALERT] Server: BACKUP, Service: MQTT, Status: DOWN");
+   if( VERBOSE ) console.log("\n[" + new Date() + " mtCluster-Info] Server: BACKUP, Service: MQTT, Status: DISCONNECTED due to logoff)");
    LmqttTROUBLE = true; })
 ActiveSvr.on(  'offline', function ()  { 
    console.log("\n[" + new Date() + " mtCluster-ALERT] Server: MAIN, Service: MQTT, Status: OFF LINE")
@@ -480,6 +504,8 @@ PassiveSvr.on( 'reconnect', function ()  {
 ActiveSvr.on(  'connect', function ()  { 
    if( !mqttFAILURE ) {
       console.log("\n[" + new Date() + " mtCluster-Info] Server: MAIN, Service: MQTT, Status: ON LINE");
+      if( Network_FAILURE > 0 ) console.log( "\n[" + new Date() + " mtCluster-Network_Ready]" );
+      Network_FAILURE=0;         
       mqttTROUBLE = false; mqttFAILUREcount = TIMEOUT;
       ActiveSvr.subscribe( ['domoticz/in', 'domoticz/out'] );
    } })  
